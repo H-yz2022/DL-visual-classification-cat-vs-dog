@@ -1,4 +1,4 @@
-# Cats vs Dogs — an end-to-end deep-learning project
+# DL Visual Classification — Cat vs Dog
 
 A complete machine-learning workflow on 23,262 pet photos: explore and clean the data, compare classical
 models with neural networks, tune the best one, measure how far it can be trusted, and decide how it
@@ -6,7 +6,7 @@ should be used.
 
 **Live report:** https://YOUR-PROJECT.vercel.app/ *(after connecting to Vercel or GitHub Pages, see below)*
 **Notebook:** [`DeepLearning_CatsVsDogs_Complete.ipynb`](DeepLearning_CatsVsDogs_Complete.ipynb) — all cells executed, with written observations after every section
-**Run it yourself:** [Open in Colab](https://colab.research.google.com/github/H-yz2022/cats-vs-dogs-deep-learning/blob/main/DeepLearning_CatsVsDogs_Complete.ipynb)
+**Run it yourself:** [Open in Colab](https://colab.research.google.com/github/H-yz2022/DL-visual-classification-cat-vs-dog/blob/main/DeepLearning_CatsVsDogs_Complete.ipynb)
 
 ## Results
 
@@ -91,7 +91,7 @@ print("dog" if p_dog >= 0.5 else "cat", round(p_dog, 3))
 
 1. Push this repository to GitHub.
 2. *Settings → Pages → Build and deployment → Source: Deploy from a branch*, branch `main`, folder `/docs`, *Save*.
-3. After a minute the report is live at `https://H-yz2022.github.io/cats-vs-dogs-deep-learning/`.
+3. After a minute the report is live at `https://H-yz2022.github.io/DL-visual-classification-cat-vs-dog/`.
    Put your live address in place of `YOUR-PROJECT.vercel.app` at the top of this README and in `docs/embed-snippet.html`.
 
 ## Data and credits
