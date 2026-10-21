@@ -40,6 +40,28 @@ should be used.
 
 ![Grad-CAM: where the model looks](results/figures/gradcam.png)
 
+## Part 2 — 37 pet breeds
+
+From "cat or dog?" to "which breed?": the [Oxford-IIIT Pet](https://www.robots.ox.ac.uk/~vgg/data/pets/)
+dataset (7,349 photos, 25 dog and 12 cat breeds). Notebook: [`DeepLearning_PetBreeds.ipynb`](DeepLearning_PetBreeds.ipynb).
+
+| | |
+|---|---|
+| **Test accuracy (37 breeds)** | **93.2 %** (95 % CI 92.3 – 94.0 %) on 3,669 photos |
+| Top-5 accuracy / macro-F1 | 99.7 % / 0.931 |
+| Cat vs dog, read off the predicted breed | 99.75 % |
+| Final model | ensemble of EfficientNet-B0 + DenseNet121 features + softmax head |
+
+**Model selection (validation accuracy):** majority class 2.7 % · colour histogram + logistic regression 7.4 % ·
+CNN from scratch 9.6 % · ResNet50V2 89.7 % · MobileNetV3-Large 92.0 % · MobileNetV2 92.6 % · DenseNet121 93.7 % ·
+EfficientNet-B0 94.0 % · **ensemble 94.9 %**. ConvNeXt-Tiny is included automatically when the notebook runs on a GPU.
+
+The hardest breeds are look-alikes that people confuse too: American Pit Bull vs Staffordshire Bull Terrier,
+Ragdoll vs Birman, Egyptian Mau vs Bengal, Russian Blue vs British Shorthair.
+
+![Model selection for 37 breeds](results_breeds/figures/selection.png)
+![t-SNE map of the test photos](results_breeds/figures/tsne.png)
+
 ## Repository layout
 
 ```
@@ -50,6 +72,10 @@ results/
   figures/                               all figures from the notebook
   cats_vs_dogs_mobilenetv2.keras         final model (v1)
   cats_vs_dogs_mobilenetv2_v2.keras      brightness-augmentation variant (not adopted)
+DeepLearning_PetBreeds.ipynb             Part 2: 37-breed recognition, executed
+results_breeds/
+  metrics.json, figures/                 numbers and figures of Part 2
+  breed_head.keras                       trained softmax head (on ensemble features)
 docs/
   index.html                             self-contained report website (GitHub Pages)
   embed-snippet.html                     iframe code to embed the report in another site

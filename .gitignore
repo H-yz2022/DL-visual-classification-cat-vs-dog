@@ -4,3 +4,4 @@ results/cache/
 .ipynb_checkpoints/
 __pycache__/
 .vercel/
+results_breeds/cache/
