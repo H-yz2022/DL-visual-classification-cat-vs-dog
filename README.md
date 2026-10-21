@@ -6,7 +6,7 @@ should be used.
 
 **Live report:** https://YOUR-PROJECT.vercel.app/ *(after connecting to Vercel or GitHub Pages, see below)*
 **Notebook:** [`DeepLearning_CatsVsDogs_Complete.ipynb`](DeepLearning_CatsVsDogs_Complete.ipynb) — all cells executed, with written observations after every section
-**Run it yourself:** [Open in Colab](https://colab.research.google.com/github/YOUR-USERNAME/cats-vs-dogs-deep-learning/blob/main/DeepLearning_CatsVsDogs_Complete.ipynb)
+**Run it yourself:** [Open in Colab](https://colab.research.google.com/github/H-yz2022/cats-vs-dogs-deep-learning/blob/main/DeepLearning_CatsVsDogs_Complete.ipynb)
 
 ## Results
 
@@ -91,8 +91,8 @@ print("dog" if p_dog >= 0.5 else "cat", round(p_dog, 3))
 
 1. Push this repository to GitHub.
 2. *Settings → Pages → Build and deployment → Source: Deploy from a branch*, branch `main`, folder `/docs`, *Save*.
-3. After a minute the report is live at `https://YOUR-USERNAME.github.io/cats-vs-dogs-deep-learning/`.
-   Replace `YOUR-USERNAME` in this README and in `docs/embed-snippet.html`.
+3. After a minute the report is live at `https://H-yz2022.github.io/cats-vs-dogs-deep-learning/`.
+   Replace `H-yz2022` in this README and in `docs/embed-snippet.html`.
 
 ## Data and credits
 
