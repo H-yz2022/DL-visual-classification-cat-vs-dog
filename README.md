@@ -4,7 +4,7 @@ A complete machine-learning workflow on 23,262 pet photos: explore and clean the
 models with neural networks, tune the best one, measure how far it can be trusted, and decide how it
 should be used.
 
-**Live report:** https://YOUR-PROJECT.vercel.app/ *(after connecting to Vercel or GitHub Pages, see below)*
+**Live site:** https://YOUR-PROJECT.vercel.app/ *(after connecting to Vercel or GitHub Pages, see below)*: a small deep-learning dashboard with an overview, this project's report and the report of the companion NLP project ([NLP-text-classification-arxiv-papers](https://github.com/H-yz2022/NLP-text-classification-arxiv-papers))
 **Notebook:** [`DeepLearning_CatsVsDogs_Complete.ipynb`](DeepLearning_CatsVsDogs_Complete.ipynb) — all cells executed, with written observations after every section
 **Run it yourself:** [Open in Colab](https://colab.research.google.com/github/H-yz2022/DL-visual-classification-cat-vs-dog/blob/main/DeepLearning_CatsVsDogs_Complete.ipynb)
 
@@ -62,6 +62,13 @@ Ragdoll vs Birman, Egyptian Mau vs Bengal, Russian Blue vs British Shorthair.
 ![Model selection for 37 breeds](results_breeds/figures/selection.png)
 ![t-SNE map of the test photos](results_breeds/figures/tsne.png)
 
+## Companion project: NLP
+
+The same workflow on text: which of seven AI fields does an arXiv paper belong to? Ten models, from TF-IDF to
+fine-tuned SciBERT; final model SciBERT + TF-IDF ensemble, test macro-F1 0.777, top-2 accuracy 91.2 %.
+Code and notebook: [NLP-text-classification-arxiv-papers](https://github.com/H-yz2022/NLP-text-classification-arxiv-papers).
+Both reports are published together from this repository's `docs/` folder.
+
 ## Repository layout
 
 ```
@@ -76,9 +83,11 @@ DeepLearning_PetBreeds.ipynb             Part 2: 37-breed recognition, executed
 results_breeds/
   metrics.json, figures/                 numbers and figures of Part 2
   breed_head.keras                       trained softmax head (on ensemble features)
-docs/
-  index.html                             self-contained report website (GitHub Pages)
-  embed-snippet.html                     iframe code to embed the report in another site
+docs/                                    the website (deep-learning dashboard, three self-contained pages)
+  index.html                             overview of both projects
+  cats-vs-dogs.html                      this project's report (Parts 1 and 2)
+  nlp-arxiv.html                         report of the companion NLP project
+  embed-snippet.html                     iframe code to embed the whole dashboard in a blog page
 requirements.txt
 ```
 

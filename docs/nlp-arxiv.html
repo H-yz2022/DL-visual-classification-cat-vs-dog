@@ -1,0 +1,1091 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>arXiv Paper Classifier</title>
+<meta name="description" content="Project report: which AI field does a research paper belong to? An end-to-end NLP pipeline on arXiv abstracts, from data collection and EDA to model selection across ten models, evaluation and a decision policy.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap">
+<style>
+/* Layout: one plain column that widens with the screen (up to 1140px), every figure full column width; small multiples only as balanced 2-column pairs. Everything is scoped under .cvd so the report can sit inside another site. */
+:root {
+  --cvd-bg: #f7f8f6;
+  --cvd-surface: #fcfcfb;
+  --cvd-ink: #16191a;
+  --cvd-ink-2: #4a5356;
+  --cvd-muted: #7a8386;
+  --cvd-rule: #dde1dc;
+  --cvd-grid: #e7eae5;
+  --cvd-axis: #c3c7c1;
+  --cvd-accent: #1d6a5f;
+  --cvd-accent-wash: #e3eeea;
+  --cvd-cat: #eb6834;
+  --cvd-dog: #2a78d6;
+  --cvd-neutral-mark: #a9b0ad;
+  --cvd-div-neg: #e34948;
+  --cvd-div-mid: #f0efec;
+  --cvd-div-pos: #2a78d6;
+  --cvd-seq-lo: #e4eefb;
+  --cvd-seq-hi: #104281;
+  --cvd-ord-1: #86b6ef;
+  --cvd-ord-2: #2a78d6;
+  --cvd-ord-3: #104281;
+  --cvd-bad: #b4302f;
+  --cvd-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cvd-mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --cvd-bg: #111415;
+    --cvd-surface: #171b1c;
+    --cvd-ink: #eceeeb;
+    --cvd-ink-2: #b8c0bd;
+    --cvd-muted: #879092;
+    --cvd-rule: #2a3032;
+    --cvd-grid: #252a2c;
+    --cvd-axis: #3a4143;
+    --cvd-accent: #5cb8a8;
+    --cvd-accent-wash: #1a2c29;
+    --cvd-cat: #d95926;
+    --cvd-dog: #3987e5;
+    --cvd-neutral-mark: #5b6466;
+    --cvd-div-neg: #e66767;
+    --cvd-div-mid: #383835;
+    --cvd-div-pos: #3987e5;
+    --cvd-seq-lo: #1d2a38;
+    --cvd-seq-hi: #86b6ef;
+    --cvd-ord-1: #184f95;
+    --cvd-ord-2: #3987e5;
+    --cvd-ord-3: #9ec5f4;
+    --cvd-bad: #e66767;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --cvd-bg: #111415;
+  --cvd-surface: #171b1c;
+  --cvd-ink: #eceeeb;
+  --cvd-ink-2: #b8c0bd;
+  --cvd-muted: #879092;
+  --cvd-rule: #2a3032;
+  --cvd-grid: #252a2c;
+  --cvd-axis: #3a4143;
+  --cvd-accent: #5cb8a8;
+  --cvd-accent-wash: #1a2c29;
+  --cvd-cat: #d95926;
+  --cvd-dog: #3987e5;
+  --cvd-neutral-mark: #5b6466;
+  --cvd-div-neg: #e66767;
+  --cvd-div-mid: #383835;
+  --cvd-div-pos: #3987e5;
+  --cvd-seq-lo: #1d2a38;
+  --cvd-seq-hi: #86b6ef;
+  --cvd-ord-1: #184f95;
+  --cvd-ord-2: #3987e5;
+  --cvd-ord-3: #9ec5f4;
+  --cvd-bad: #e66767;
+  color-scheme: dark;
+}
+
+body { background: var(--cvd-bg); color: var(--cvd-ink); }
+
+.cvd {
+  font-family: var(--cvd-body);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: var(--cvd-ink);
+  background: var(--cvd-bg);
+  padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.cvd *, .cvd *::before, .cvd *::after { box-sizing: border-box; }
+.cvd-frame { max-width: 1140px; margin: 0 auto; display: grid; gap: 64px; }
+.cvd-frame > * { min-width: 0; }
+.cvd p, .cvd ul, .cvd ol { margin: 0; }
+.cvd-flow { display: grid; gap: 1em; align-content: start; }
+.cvd-flow > * { min-width: 0; }
+.cvd a { color: var(--cvd-accent); text-underline-offset: 3px; }
+.cvd a:focus-visible, .cvd summary:focus-visible { outline: 2px solid var(--cvd-accent); outline-offset: 3px; border-radius: 4px; }
+.cvd strong { font-weight: 600; }
+.cvd code { font-family: var(--cvd-mono); font-size: 0.86em; background: var(--cvd-accent-wash); padding: 0.1em 0.35em; border-radius: 4px; }
+.cvd h1, .cvd h2, .cvd h3 { margin: 0; text-wrap: balance; color: var(--cvd-ink); }
+.cvd h1 { font-size: clamp(2rem, 1.5rem + 2.2vw, 2.75rem); line-height: 1.12; font-weight: 700; letter-spacing: -0.015em; }
+.cvd h2 { font-size: clamp(1.4rem, 1.25rem + 0.6vw, 1.7rem); line-height: 1.2; font-weight: 700; letter-spacing: -0.01em; }
+.cvd h3 { font-size: 1.08rem; line-height: 1.35; font-weight: 600; }
+.cvd-eyebrow { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cvd-muted); }
+.cvd-small { font-size: 0.875rem; color: var(--cvd-ink-2); }
+
+/* intro */
+.cvd-intro { display: grid; gap: 18px; }
+.cvd-dek { font-size: 1.2rem; line-height: 1.55; color: var(--cvd-ink-2); }
+.cvd-meta { font-size: 0.875rem; color: var(--cvd-ink-2); }
+.cvd-meta b { font-weight: 600; color: var(--cvd-ink); }
+.cvd-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; border-top: 1px solid var(--cvd-rule); border-bottom: 1px solid var(--cvd-rule); padding-block: 18px; }
+.cvd-stat { display: grid; gap: 2px; align-content: start; }
+.cvd-stat .v { font-size: 1.75rem; font-weight: 700; line-height: 1.15; }
+.cvd-stat .l { font-size: 0.82rem; color: var(--cvd-ink-2); line-height: 1.4; }
+.cvd-toc { columns: 2; column-gap: 32px; padding-left: 1.6em; font-size: 0.95rem; }
+.cvd-toc li { break-inside: avoid; padding-block: 2px; }
+.cvd-toc span { color: var(--cvd-muted); }
+
+/* primer */
+.cvd-fold { border-top: 1px solid var(--cvd-rule); }
+.cvd-fold:last-child { border-bottom: 1px solid var(--cvd-rule); }
+.cvd-fold summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: baseline; padding: 13px 2px; }
+.cvd-fold summary::-webkit-details-marker { display: none; }
+.cvd-fold summary .q { font-weight: 600; }
+.cvd-fold summary .h { font-size: 0.88rem; color: var(--cvd-ink-2); grid-column: 1; }
+.cvd-fold summary .pm { grid-row: 1 / span 2; grid-column: 2; color: var(--cvd-accent); font-size: 1.25rem; line-height: 1; }
+.cvd-fold summary .pm::before { content: "+"; }
+.cvd-fold[open] summary .pm::before { content: "\2212"; }
+.cvd-fold .body { padding: 2px 2px 20px; display: grid; gap: 12px; }
+.cvd-fold .body ul, .cvd-fold .body ol { padding-left: 1.2em; display: grid; gap: 6px; }
+
+/* sections */
+.cvd-sec { display: grid; gap: 22px; scroll-margin-top: 16px; }
+.cvd-sec > * { min-width: 0; }
+.cvd-sec > header { display: grid; gap: 4px; padding-top: 20px; border-top: 1px solid var(--cvd-rule); }
+.cvd-sec .num { font-size: 0.82rem; font-weight: 600; color: var(--cvd-accent); }
+.cvd-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 24px; }
+.cvd-pair > * { min-width: 0; }
+
+.cvd-fig { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; align-content: start; }
+.cvd-fig figcaption { font-size: 0.85rem; color: var(--cvd-ink-2); line-height: 1.5; }
+.cvd-fig figcaption b { color: var(--cvd-ink); font-weight: 600; }
+.cvd-fig .ttl { font-weight: 600; font-size: 0.92rem; }
+.cvd-fig img { display: block; width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--cvd-rule); background: #fff; }
+.cvd-chart { width: 100%; min-width: 0; min-height: 40px; overflow: hidden; }
+.cvd-chart svg { display: block; }
+.cvd-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.8rem; color: var(--cvd-ink-2); }
+.cvd-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.cvd-legend i { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
+.cvd-legend i.dash { background: none !important; border-top: 2px dashed var(--cvd-muted); height: 0; }
+
+.cvd-note { border-left: 3px solid var(--cvd-accent); padding: 2px 0 2px 16px; display: grid; gap: 8px; }
+.cvd-list { display: grid; gap: 8px; padding-left: 1.2em; }
+
+.cvd-tablewrap { overflow-x: auto; border-top: 1px solid var(--cvd-rule); border-bottom: 1px solid var(--cvd-rule); }
+.cvd-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+.cvd-table th, .cvd-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--cvd-grid); vertical-align: top; }
+.cvd-table thead th { font-weight: 600; color: var(--cvd-ink-2); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.cvd-table tbody tr:last-child td { border-bottom: 0; }
+.cvd-table .r { text-align: right; }
+.cvd-table tr.win td { background: var(--cvd-accent-wash); }
+.cvd-pill { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0 7px; border-radius: 999px; white-space: nowrap; }
+.cvd-pill.keep { background: var(--cvd-accent-wash); color: var(--cvd-accent); }
+.cvd-pill.drop { background: color-mix(in srgb, var(--cvd-bad) 14%, transparent); color: var(--cvd-bad); }
+
+.cvd-foot { display: grid; gap: 12px; padding-top: 20px; border-top: 1px solid var(--cvd-rule); font-size: 0.9rem; color: var(--cvd-ink-2); }
+.cvd-foot pre { margin: 0; font-family: var(--cvd-mono); font-size: 0.82rem; background: var(--cvd-surface); border: 1px solid var(--cvd-rule); border-radius: 6px; padding: 10px 12px; overflow-x: auto; color: var(--cvd-ink); }
+
+/* chart text */
+.cvd-chart text { font-family: var(--cvd-body); font-size: 11px; fill: var(--cvd-muted); }
+.cvd-chart text.lbl { fill: var(--cvd-ink-2); font-size: 12px; }
+.cvd-chart text.val { fill: var(--cvd-ink); font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.cvd-chart text.ax { font-variant-numeric: tabular-nums; }
+.cvd-chart text.halo { paint-order: stroke; stroke: var(--cvd-bg); stroke-width: 5px; stroke-linejoin: round; }
+.cvd-chart .hit { fill: transparent; cursor: crosshair; }
+.cvd-chart .hit:hover { fill: color-mix(in srgb, var(--cvd-ink) 5%, transparent); }
+
+.cvd-tip { position: fixed; z-index: 50; pointer-events: none; background: var(--cvd-ink); color: var(--cvd-bg); font-family: var(--cvd-body); font-size: 0.8rem; line-height: 1.45; padding: 7px 10px; border-radius: 6px; max-width: 260px; font-variant-numeric: tabular-nums; }
+.cvd-tip b { font-weight: 600; }
+
+/* Windows contrast themes force all colours; keep the data colours of charts and legend keys readable */
+@media (forced-colors: active) {
+  .cvd-chart svg, .cvd-legend i, .cvd-pill, .cvd-table tr.win td { forced-color-adjust: none; }
+  .cvd-legend i.dash { border-top-color: CanvasText; }
+}
+@media (min-width: 1000px) {
+  .cvd { font-size: 1.125rem; }
+  .cvd-toc { columns: 3; }
+  .cvd-dek { font-size: 1.3rem; }
+}
+@media (max-width: 640px) {
+  .cvd { font-size: 1rem; padding-block: 28px 48px; }
+  .cvd-frame { gap: 52px; }
+  .cvd-pair { grid-template-columns: minmax(0, 1fr); }
+  .cvd-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cvd-toc { columns: 1; }
+}
+
+/* NLP report: seven arXiv fields (categorical, validated light and dark; three light steps are below 3:1, so every use carries a text label) */
+:root {
+  --cvd-c1: #2a78d6; --cvd-c2: #eb6834; --cvd-c3: #1baf7a; --cvd-c4: #eda100;
+  --cvd-c5: #e87ba4; --cvd-c6: #008300; --cvd-c7: #6250d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --cvd-c1: #3987e5; --cvd-c2: #d95926; --cvd-c3: #199e70; --cvd-c4: #c98500;
+    --cvd-c5: #d55181; --cvd-c6: #008300; --cvd-c7: #9085e9;
+  }
+}
+:root[data-theme="dark"] {
+  --cvd-c1: #3987e5; --cvd-c2: #d95926; --cvd-c3: #199e70; --cvd-c4: #c98500;
+  --cvd-c5: #d55181; --cvd-c6: #008300; --cvd-c7: #9085e9;
+}
+
+.cvd-words { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.cvd-words span { font-size: 0.8rem; padding: 1px 8px; border-radius: 999px; background: var(--cvd-accent-wash); color: var(--cvd-ink); white-space: nowrap; }
+.cvd-chips { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.cvd-chips button { font: inherit; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--cvd-rule); background: var(--cvd-surface); color: var(--cvd-ink-2); cursor: pointer; }
+.cvd-chips button i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.cvd-chips button[aria-pressed="true"] { border-color: var(--cvd-ink-2); color: var(--cvd-ink); font-weight: 600; }
+.cvd-chips button:focus-visible { outline: 2px solid var(--cvd-accent); outline-offset: 2px; }
+.cvd-legend i.dot { width: 10px; height: 10px; border-radius: 50%; }
+.cvd-table td.nowrap { white-space: nowrap; }
+@media (forced-colors: active) {
+  .cvd-chips button i, .cvd-legend i.dot { forced-color-adjust: none; }
+}
+
+</style>
+<style>html,body{margin:0}[hidden]{display:none!important}</style>
+<style>
+/* Deep-learning dashboard: navigation shared by the overview and both reports */
+.cvd-sitenav { max-width: 1140px; margin: -12px auto 40px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 8px 20px; padding-bottom: 12px; border-bottom: 1px solid var(--cvd-rule); font-size: 0.9rem; }
+.cvd-sitenav .home { font-weight: 700; color: var(--cvd-ink); text-decoration: none; letter-spacing: -0.005em; }
+.cvd-sitenav .links { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.cvd-sitenav .links a { color: var(--cvd-ink-2); text-decoration: none; padding: 4px 11px; border-radius: 999px; }
+.cvd-sitenav .links a:hover { background: var(--cvd-accent-wash); color: var(--cvd-ink); }
+.cvd-sitenav .links a[aria-current="page"] { background: var(--cvd-accent-wash); color: var(--cvd-accent); font-weight: 600; }
+.cvd-sitenav a:focus-visible { outline: 2px solid var(--cvd-accent); outline-offset: 2px; }
+@media (max-width: 520px) { .cvd-sitenav .long { display: none; } }
+
+/* overview page */
+.cvd-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.cvd-card { display: grid; gap: 14px; align-content: start; grid-template-rows: auto auto 1fr auto auto; padding: 24px; border: 1px solid var(--cvd-rule); border-radius: 10px; background: var(--cvd-surface); min-width: 0; }
+.cvd-card h2 { font-size: 1.35rem; }
+.cvd-card .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; border-top: 1px solid var(--cvd-rule); padding-top: 14px; }
+.cvd-card .stats .v { font-size: 1.4rem; font-weight: 700; line-height: 1.15; display: block; }
+.cvd-card .stats .l { font-size: 0.8rem; color: var(--cvd-ink-2); line-height: 1.35; display: block; }
+.cvd-card .go { font-weight: 600; text-decoration: none; }
+.cvd-card .go:hover { text-decoration: underline; }
+@media (max-width: 760px) {
+  .cvd-cards { grid-template-columns: minmax(0, 1fr); }
+  .cvd-card { padding: 18px; }
+}
+</style>
+</head>
+<body>
+
+
+<article class="cvd" id="cvd-report">
+<nav class="cvd-sitenav" aria-label="Deep learning projects"><a class="home" href="index.html">Deep learning projects</a><span class="links"><a href="index.html">Overview</a><a href="cats-vs-dogs.html">Vision<span class="long"> · cats vs dogs</span></a><a href="nlp-arxiv.html" aria-current="page">NLP<span class="long"> · arXiv papers</span></a></span></nav>
+<div class="cvd-frame">
+
+  <header class="cvd-intro">
+    <span class="cvd-eyebrow">Project report · Natural language processing</span>
+    <h1>Which AI field is this paper? Classifying arXiv abstracts</h1>
+    <p class="cvd-dek">Give a model the title and abstract of a research paper and ask which of seven AI fields it belongs to. Ten models, from word counts to fine-tuned transformers, compete on 14,000 real papers.</p>
+    <p class="cvd-meta">Data <b>arXiv API</b> · Frameworks <b>scikit-learn, Keras, PyTorch + Hugging Face Transformers</b> · Final model <b>SciBERT + TF-IDF ensemble</b> · Notebook <b>NLP_ArxivPaperClassification.ipynb</b></p>
+  </header>
+
+  <section class="cvd-flow" aria-labelledby="about-h">
+    <h2 id="about-h">About this report</h2>
+    <p>arXiv, the open preprint server, receives thousands of new papers every week. Each one is filed under a primary category: is a paper on retrieval-augmented language models <em>Information Retrieval</em>, <em>Computation and Language</em> or <em>Artificial Intelligence</em>? Authors choose, moderators check, and conference systems use the same kind of label to route submissions to reviewers. This project asks how well a model can make that call from the abstract alone.</p>
+    <p>It is the text counterpart of my <a href="cats-vs-dogs.html">image-classification project</a> (cats vs dogs and 37 breeds): the same workflow on a different kind of data. Data quality and exploration come first, then a model selection across six families of models, an honest test, and a decision on how the model should be used.</p>
+    <p>All numbers come from one run of the accompanying notebook on a free Colab T4 GPU. Hover over the charts for exact values. New to NLP? Open the <a href="#primer">NLP primer</a> first; otherwise start with <a href="#data">the data</a>.</p>
+  </section>
+
+  <section class="cvd-stats" aria-label="Results at a glance">
+    <div class="cvd-stat"><span class="v">0.777</span><span class="l">test macro-F1, 2,098 unseen papers</span></div>
+    <div class="cvd-stat"><span class="v">91.2%</span><span class="l">right field among the top two</span></div>
+    <div class="cvd-stat"><span class="v">10</span><span class="l">models compared, 6 families</span></div>
+    <div class="cvd-stat"><span class="v">+2.4</span><span class="l">points over the best classical model</span></div>
+  </section>
+
+  <nav class="cvd-flow" aria-labelledby="pipe-h">
+    <h2 id="pipe-h">The pipeline</h2>
+    <ol class="cvd-toc">
+      <li><a href="#data">Dataset</a> <span>· arXiv API, 7 AI fields</span></li>
+      <li><a href="#quality">Data quality</a> <span>· withdrawn, short, duplicate</span></li>
+      <li><a href="#eda">Exploratory analysis</a> <span>· windows, cross-listing, vocabulary</span></li>
+      <li><a href="#split">Split</a> <span>· stratified 70 / 15 / 15</span></li>
+      <li><a href="#selection">Model selection</a> <span>· 10 models, 6 families</span></li>
+      <li><a href="#tuning">Tuning</a> <span>· 12-trial TF-IDF grid</span></li>
+      <li><a href="#evaluation">Evaluation</a> <span>· test set, errors, embedding map</span></li>
+      <li><a href="#policy">Decision policy</a> <span>· top-2, abstain when unsure</span></li>
+      <li><a href="#summary">Summary</a> <span>· results, lessons, limits</span></li>
+      
+    </ol>
+  </nav>
+
+  <!-- ===================================================== primer (folded) -->
+  <section class="cvd-flow" id="primer" aria-labelledby="primer-h">
+    <span class="cvd-eyebrow">Background · optional</span>
+    <h2 id="primer-h">NLP primer</h2>
+    <p class="cvd-small">The ideas the report relies on. Each topic is folded; open the ones you need.</p>
+    <div>
+      <details class="cvd-fold">
+        <summary><span class="q">How does a computer read text?</span><span class="pm" aria-hidden="true"></span><span class="h">Tokens, vocabulary, bag of words</span></summary>
+        <div class="body">
+          <p>A model needs numbers. The first step is <strong>tokenisation</strong>: splitting text into units such as words ("robot", "grasping") or word pieces ("grasp", "##ing"). The set of all known tokens is the <strong>vocabulary</strong>.</p>
+          <p>The simplest representation is a <strong>bag of words</strong>: one column per vocabulary word, one row per document, each cell counting how often the word appears. Word order is lost, but for "which field is this?" the words alone already carry most of the signal.</p>
+        </div>
+      </details>
+      <details class="cvd-fold">
+        <summary><span class="q">TF-IDF</span><span class="pm" aria-hidden="true"></span><span class="h">Weighting words by how informative they are</span></summary>
+        <div class="body">
+          <p>Raw counts over-weight words like "model" that appear everywhere. <strong>TF-IDF</strong> multiplies the term frequency in a document by the inverse document frequency, <code>idf = log(N / df)</code>, where <code>df</code> is the number of documents containing the word. Rare, specific words ("manipulation", "posterior") get large weights; common ones shrink towards zero.</p>
+          <ul>
+            <li><strong>n-grams</strong>: also count word pairs ("language model", "sample complexity"), which carry meaning single words miss.</li>
+            <li><strong>Sublinear tf</strong>: use <code>1 + log(tf)</code>, so a word repeated ten times is not ten times as important.</li>
+            <li>The result is a very wide, very sparse matrix: here up to 200,000 columns, almost all zero for any one abstract.</li>
+          </ul>
+        </div>
+      </details>
+      <details class="cvd-fold">
+        <summary><span class="q">Linear classifiers for text</span><span class="pm" aria-hidden="true"></span><span class="h">Naive Bayes, logistic regression, linear SVM</span></summary>
+        <div class="body">
+          <ul>
+            <li><strong>Naive Bayes</strong> learns how likely each word is in each field and multiplies the evidence, assuming words are independent. Very fast, a classic text baseline. The <em>complement</em> variant used here is more stable when classes differ.</li>
+            <li><strong>Logistic regression</strong> learns one weight per word and field; a softmax turns the seven weighted sums into probabilities. <code>C</code> controls regularisation: smaller C means smaller weights and less overfitting.</li>
+            <li><strong>Linear SVM</strong> draws the boundary with the largest margin between fields (hinge loss). Often the most accurate linear model, but it gives scores, not calibrated probabilities.</li>
+          </ul>
+        </div>
+      </details>
+      <details class="cvd-fold">
+        <summary><span class="q">Word embeddings and neural networks</span><span class="pm" aria-hidden="true"></span><span class="h">Embedding layer, TextCNN, BiLSTM</span></summary>
+        <div class="body">
+          <p>An <strong>embedding</strong> maps each word to a dense vector (here 128 numbers) that is learned during training, so that words used in similar contexts get similar vectors. Neural networks then read the sequence of vectors:</p>
+          <ul>
+            <li><strong>TextCNN</strong> slides 128 filters over windows of five words and keeps the strongest response of each filter, which acts as a learned phrase detector.</li>
+            <li><strong>BiLSTM</strong> reads the abstract left-to-right and right-to-left with a memory cell whose gates decide what to keep and what to forget.</li>
+          </ul>
+          <p>Trained from scratch, both must learn the language from about 10,000 abstracts, which is very little.</p>
+        </div>
+      </details>
+      <details class="cvd-fold">
+        <summary><span class="q">Transformers, attention and BERT</span><span class="pm" aria-hidden="true"></span><span class="h">Pretrained language models and fine-tuning</span></summary>
+        <div class="body">
+          <p><strong>Self-attention</strong> lets every token look at every other token and decide which ones matter for its meaning: <code>softmax(Q·Kᵀ / √d)·V</code>. Stacking attention layers gives a <strong>transformer</strong>.</p>
+          <p><strong>BERT</strong> is a transformer pretrained on huge amounts of text by hiding words and predicting them (masked language modelling). It arrives already knowing a lot about language. <strong>Fine-tuning</strong> adds a small classification layer and trains all weights for a few epochs at a tiny learning rate (3e-5 here).</p>
+          <ul>
+            <li><strong>DistilBERT</strong>: a smaller BERT (6 layers, 66 M parameters) distilled from the full model; general English.</li>
+            <li><strong>SciBERT</strong>: BERT pretrained on 1.14 million scientific papers, with its own scientific vocabulary.</li>
+            <li><strong>MiniLM sentence embeddings</strong>: a small transformer trained to map a whole text to one 384-number vector, so that texts about similar things land close together. Used <em>frozen</em> here, as a feature extractor for logistic regression.</li>
+          </ul>
+        </div>
+      </details>
+      <details class="cvd-fold">
+        <summary><span class="q">Measuring a multi-class classifier</span><span class="pm" aria-hidden="true"></span><span class="h">Precision, recall, F1, macro-F1, top-2 accuracy</span></summary>
+        <div class="body">
+          <ul>
+            <li><strong>Precision</strong> for a field: of the papers the model put there, the share that belong there. <strong>Recall</strong>: of the papers that belong there, the share the model found.</li>
+            <li><strong>F1</strong> = 2 · precision · recall / (precision + recall), the balance of the two.</li>
+            <li><strong>Macro-F1</strong>: the plain average of the seven F1 scores, so every field counts equally. The main metric of this report.</li>
+            <li><strong>Top-2 accuracy</strong>: the right field is one of the model's two highest-probability answers. It matters when the model suggests rather than decides.</li>
+            <li><strong>Confusion matrix</strong>: rows are true fields, columns predicted fields; everything off the diagonal is a mistake.</li>
+          </ul>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- ===================================================== 01 -->
+  <section class="cvd-sec" id="data">
+    <header><span class="num">01 · Dataset</span><h2>14,000 recent arXiv abstracts from seven AI fields</h2></header>
+    <p>The notebook queries the <a href="https://info.arxiv.org/help/api/index.html" target="_blank" rel="noopener">arXiv API</a> for the 2,000 most recent papers whose <strong>primary</strong> category is each of the seven fields. Title and abstract are joined into one text; the primary category is the label. arXiv metadata is free to reuse (CC0).</p>
+    <div class="cvd-tablewrap"><table class="cvd-table">
+      <thead><tr><th>Code</th><th>Field</th><th class="r">Papers kept</th><th class="r">Median words</th><th class="r">Days covered</th></tr></thead>
+      <tbody>
+        <tr><td class="nowrap"><code>cs.AI</code></td><td>Artificial Intelligence</td><td class="r">1,995</td><td class="r">199</td><td class="r">21</td></tr>
+        <tr><td class="nowrap"><code>cs.CL</code></td><td>Computation & Language (NLP)</td><td class="r">1,997</td><td class="r">192</td><td class="r">27</td></tr>
+        <tr><td class="nowrap"><code>cs.CV</code></td><td>Computer Vision</td><td class="r">1,999</td><td class="r">195</td><td class="r">19</td></tr>
+        <tr><td class="nowrap"><code>cs.IR</code></td><td>Information Retrieval</td><td class="r">2,000</td><td class="r">193</td><td class="r">210</td></tr>
+        <tr><td class="nowrap"><code>cs.LG</code></td><td>Machine Learning</td><td class="r">2,000</td><td class="r">192</td><td class="r">16</td></tr>
+        <tr><td class="nowrap"><code>cs.RO</code></td><td>Robotics</td><td class="r">1,997</td><td class="r">191</td><td class="r">29</td></tr>
+        <tr><td class="nowrap"><code>stat.ML</code></td><td>Statistics — Machine Learning</td><td class="r">1,997</td><td class="r">179</td><td class="r">232</td></tr>
+        
+      </tbody>
+    </table></div>
+    <figure class="cvd-fig">
+      <span class="ttl">Publication window of each category's 2,000 papers</span>
+      <div class="cvd-chart" id="ch-window"></div>
+      <figcaption><b>Busy fields fill up fast.</b> 2,000 cs.LG papers appeared in 16 days; stat.ML needed 232. Topics drift over time, so part of what separates a slow field may be its older topics. A time-matched sample would remove that confound (see the limitations).</figcaption>
+    </figure>
+  </section>
+
+  <!-- ===================================================== 02 -->
+  <section class="cvd-sec" id="quality">
+    <header><span class="num">02 · Data quality</span><h2>15 papers removed, maths kept</h2></header>
+    <p>Text data fails in its own ways: empty or withdrawn entries, duplicates, other languages, and formula-heavy abstracts. Each check is counted, and every decision is explicit.</p>
+    <div class="cvd-tablewrap"><table class="cvd-table">
+      <thead><tr><th>Check</th><th class="r">Papers</th><th class="r">Share</th><th>Decision</th></tr></thead>
+      <tbody>
+        <tr><td>Empty or missing abstract</td><td class="r">0</td><td class="r">0.00%</td><td><span class="cvd-pill drop">remove</span></td></tr>
+        <tr><td>Duplicate title</td><td class="r">0</td><td class="r">0.00%</td><td><span class="cvd-pill drop">remove</span></td></tr>
+        <tr><td>Withdrawn paper</td><td class="r">12</td><td class="r">0.09%</td><td><span class="cvd-pill drop">remove</span></td></tr>
+        <tr><td>Very short abstract (< 30 words)</td><td class="r">3</td><td class="r">0.02%</td><td><span class="cvd-pill drop">remove</span></td></tr>
+        <tr><td>Mostly non-ASCII (likely not English)</td><td class="r">0</td><td class="r">0.00%</td><td><span class="cvd-pill keep">keep</span> inspect</td></tr>
+        <tr><td>LaTeX-heavy (> 10 $ signs)</td><td class="r">497</td><td class="r">3.55%</td><td><span class="cvd-pill keep">keep</span> maths is a real signal</td></tr>
+        
+      </tbody>
+    </table></div>
+    <p>Withdrawn papers keep only a note ("this paper has been withdrawn"), so they carry no signal about the field. LaTeX-heavy abstracts stay: notation such as <code>$\mathcal{O}(n \log n)$</code> is itself a hint for statistics and theory papers. 13,985 papers remain.</p>
+  </section>
+
+  <!-- ===================================================== 03 -->
+  <section class="cvd-sec" id="eda">
+    <header><span class="num">03 · Exploratory analysis</span><h2>Distinct vocabularies, overlapping fields</h2></header>
+    <p>The classes are balanced (1,995 to 2,000 papers each) and abstracts have similar length (medians 179–199 words), so neither size nor length gives a field away. Two things matter more: which other fields a paper is listed in, and which words it uses.</p>
+    <figure class="cvd-fig">
+      <span class="ttl">Cross-listing: share of each field's papers also listed in another field</span>
+      <div class="cvd-chart" id="ch-cross"></div>
+      <figcaption><b>Rows are primary categories.</b> 98% of stat.ML papers are also listed in cs.LG, and cs.AI is a second category for 15%–30% of the papers in every other cs field. Many papers genuinely belong to two fields, which caps how well any single-label model can do.</figcaption>
+    </figure>
+    <figure class="cvd-fig">
+      <span class="ttl">Most distinctive words per field (χ² test, one field against the rest)</span>
+      <div class="cvd-tablewrap"><table class="cvd-table">
+        <thead><tr><th>Field</th><th>Words that set it apart</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap"><code>cs.AI</code></td><td><div class="cvd-words"><span>agent</span><span>agents</span><span>ai</span><span>harness</span><span>reasoning</span><span>tool</span><span>llm</span><span>execution</span></div></td></tr>
+          <tr><td class="nowrap"><code>cs.CL</code></td><td><div class="cvd-words"><span>language</span><span>speech</span><span>languages</span><span>llms</span><span>english</span><span>multilingual</span><span>models</span><span>text</span></div></td></tr>
+          <tr><td class="nowrap"><code>cs.CV</code></td><td><div class="cvd-words"><span>image</span><span>video</span><span>visual</span><span>images</span><span>scene</span><span>segmentation</span><span>spatial</span><span>camera</span></div></td></tr>
+          <tr><td class="nowrap"><code>cs.IR</code></td><td><div class="cvd-words"><span>retrieval</span><span>recommendation</span><span>user</span><span>item</span><span>ranking</span><span>query</span><span>recommender</span><span>rag</span></div></td></tr>
+          <tr><td class="nowrap"><code>cs.LG</code></td><td><div class="cvd-words"><span>learning</span><span>retrieval</span><span>forecasting</span><span>muon</span><span>robot</span><span>visual</span><span>neural</span><span>training</span></div></td></tr>
+          <tr><td class="nowrap"><code>cs.RO</code></td><td><div class="cvd-words"><span>robot</span><span>manipulation</span><span>action</span><span>contact</span><span>robots</span><span>navigation</span><span>vla</span><span>robotic</span></div></td></tr>
+          <tr><td class="nowrap"><code>stat.ML</code></td><td><div class="cvd-words"><span>sample</span><span>bounds</span><span>bayesian</span><span>statistical</span><span>finite</span><span>posterior</span><span>regression</span><span>gaussian</span></div></td></tr>
+          
+        </tbody>
+      </table></div>
+      <figcaption>Robotics, vision and retrieval have their own vocabulary. cs.LG's list includes <em>retrieval</em>, <em>robot</em> and <em>visual</em>: machine learning is applied everywhere, which predicts where the models will struggle.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ===================================================== 04 -->
+  <section class="cvd-sec" id="split">
+    <header><span class="num">04 · Split</span><h2>Stratified 70 / 15 / 15</h2></header>
+    <p>Training 9,789 · validation 2,098 · test 2,098 papers, each with the same share of every field. Every model is trained on the training set and compared on the <strong>validation</strong> set; the test set is used once, for the final model only. The TF-IDF vocabulary and the neural tokenisers are fitted on training papers only, so nothing about validation or test leaks in.</p>
+  </section>
+
+  <!-- ===================================================== 05 -->
+  <section class="cvd-sec" id="selection">
+    <header><span class="num">05 · Model selection</span><h2>10 models, from word counts to SciBERT</h2></header>
+    <p>The candidates differ mainly in <strong>what they know before training</strong>. All are scored on validation macro-F1, with training time, size and prediction speed alongside.</p>
+    <div class="cvd-tablewrap"><table class="cvd-table">
+      <thead><tr><th>Family</th><th>Models</th><th>Knows before training</th></tr></thead>
+      <tbody>
+        <tr><td class="nowrap"><span class="cvd-legend"><span><i class="dot" style="background:var(--cvd-neutral-mark)"></i>Baseline</span></span></td><td>Majority class</td><td>nothing: always predicts the most common field</td></tr>
+        <tr><td class="nowrap"><span class="cvd-legend"><span><i class="dot" style="background:var(--cvd-c1)"></i>Classical NLP</span></span></td><td>TF-IDF (words + word pairs) with Naive Bayes, logistic regression, linear SVM</td><td>word statistics of the training papers</td></tr>
+        <tr><td class="nowrap"><span class="cvd-legend"><span><i class="dot" style="background:var(--cvd-c2)"></i>Neural, from scratch</span></span></td><td>TextCNN, BiLSTM (Keras)</td><td>nothing: learns its word vectors from 9,789 abstracts</td></tr>
+        <tr><td class="nowrap"><span class="cvd-legend"><span><i class="dot" style="background:var(--cvd-c3)"></i>Pretrained, frozen</span></span></td><td>MiniLM sentence embeddings + logistic regression</td><td>general meaning of English sentences</td></tr>
+        <tr><td class="nowrap"><span class="cvd-legend"><span><i class="dot" style="background:var(--cvd-c4)"></i>Pretrained, fine-tuned</span></span></td><td>DistilBERT, SciBERT (PyTorch, 3 epochs, up to 256 tokens)</td><td>English (DistilBERT) or scientific papers (SciBERT)</td></tr>
+        <tr><td class="nowrap"><span class="cvd-legend"><span><i class="dot" style="background:var(--cvd-c5)"></i>Ensemble</span></span></td><td>best fine-tuned model + TF-IDF logistic regression, averaging their probabilities</td><td>both: context and exact keywords</td></tr>
+      </tbody>
+    </table></div>
+    <figure class="cvd-fig">
+      <span class="ttl">Validation macro-F1</span>
+      <div class="cvd-chart" id="ch-sel"></div>
+      <figcaption>Colour shows the family (table above). The majority-class baseline scores 0.036 and is left off the axis.</figcaption>
+    </figure>
+    <figure class="cvd-fig">
+      <span class="ttl">Quality against training cost</span>
+      <div class="cvd-chart" id="ch-cost"></div>
+      <figcaption>Bubble area grows with the number of parameters. Training times are on one T4 GPU (neural models) or its CPU (classical models). The two pretrained-and-fine-tuned models buy their lead with 10–20 times the training time of the best classical model.</figcaption>
+    </figure>
+    <div class="cvd-tablewrap"><table class="cvd-table">
+      <thead><tr><th>Model</th><th class="r">Val. macro-F1</th><th class="r">Val. accuracy</th><th class="r">Training</th><th class="r">Parameters</th><th class="r">ms / abstract</th></tr></thead>
+      <tbody>
+        <tr class="win"><td>Ensemble: SciBERT + TF-IDF LR</td><td class="r">0.762</td><td class="r">76.6%</td><td class="r">7.8 min</td><td class="r">111.0 M</td><td class="r">3.62</td></tr>
+        <tr class=""><td>SciBERT (fine-tuned)</td><td class="r">0.756</td><td class="r">76.1%</td><td class="r">7.4 min</td><td class="r">109.9 M</td><td class="r">3.61</td></tr>
+        <tr class=""><td>TF-IDF + Logistic Regression</td><td class="r">0.739</td><td class="r">74.1%</td><td class="r">22 s</td><td class="r">1.1 M</td><td class="r">0.01</td></tr>
+        <tr class=""><td>TF-IDF + Linear SVM</td><td class="r">0.737</td><td class="r">74.3%</td><td class="r">0.57 s</td><td class="r">1.1 M</td><td class="r">< 0.01</td></tr>
+        <tr class=""><td>DistilBERT (fine-tuned)</td><td class="r">0.734</td><td class="r">74.2%</td><td class="r">3.8 min</td><td class="r">67.0 M</td><td class="r">1.80</td></tr>
+        <tr class=""><td>MiniLM embeddings + LR</td><td class="r">0.724</td><td class="r">72.6%</td><td class="r">43 s</td><td class="r">22.7 M</td><td class="r">3.07</td></tr>
+        <tr class=""><td>TextCNN (from scratch)</td><td class="r">0.722</td><td class="r">72.3%</td><td class="r">56 s</td><td class="r">3.9 M</td><td class="r">0.10</td></tr>
+        <tr class=""><td>TF-IDF + Naive Bayes</td><td class="r">0.701</td><td class="r">72.0%</td><td class="r">0.03 s</td><td class="r">1.1 M</td><td class="r">< 0.01</td></tr>
+        <tr class=""><td>BiLSTM (from scratch)</td><td class="r">0.657</td><td class="r">67.0%</td><td class="r">28 s</td><td class="r">3.9 M</td><td class="r">0.31</td></tr>
+        <tr class=""><td>Majority class</td><td class="r">0.036</td><td class="r">14.3%</td><td class="r">0.00 s</td><td class="r">–</td><td class="r">–</td></tr>
+        
+      </tbody>
+    </table></div>
+    <figure class="cvd-fig">
+      <span class="ttl">Validation F1 per field, every model</span>
+      <div class="cvd-chart" id="ch-pc"></div>
+      <figcaption>Rows sorted by macro-F1. Every model finds cs.RO, cs.IR and cs.CV easy and struggles with cs.AI and cs.LG; better models gain mostly in the hard columns.</figcaption>
+    </figure>
+    <figure class="cvd-fig">
+      <span class="ttl">Validation macro-F1 per training epoch</span>
+      <div class="cvd-legend"><span><i style="background:var(--cvd-c2)"></i>from scratch</span><span><i style="background:var(--cvd-c4)"></i>fine-tuned</span><span><i class="dash"></i>second model of the family</span></div>
+      <div class="cvd-chart" id="ch-curves"></div>
+      <figcaption>The pretrained models start where the scratch models end: SciBERT scores 0.747 after one epoch, above anything TextCNN or BiLSTM reaches. The scratch models peak after 3–4 epochs and then overfit; early stopping keeps their best epoch.</figcaption>
+    </figure>
+    <div class="cvd-note">
+      <p><strong>Selection rule:</strong> highest validation macro-F1. TF-IDF + Logistic Regression sets a strong bar (0.739 in 22 s), above the best network trained from scratch (TextCNN, 0.722) and the frozen MiniLM embeddings (0.724). SciBERT beats DistilBERT (0.756 vs 0.734): pretraining on scientific papers pays off. Averaging SciBERT with TF-IDF logistic regression adds 0.6 points at almost no cost, so <strong>Ensemble: SciBERT + TF-IDF LR</strong> is the final model.</p>
+    </div>
+  </section>
+
+  <!-- ===================================================== 06 -->
+  <section class="cvd-sec" id="tuning">
+    <header><span class="num">06 · Tuning</span><h2>The classical baseline is already close to its best</h2></header>
+    <p>A fair comparison needs a tuned baseline. A 12-trial grid varies the TF-IDF features (single words vs words + pairs; minimum document frequency 2 or 5) and the regularisation <code>C</code> of logistic regression (1, 4, 16).</p>
+    <figure class="cvd-fig">
+      <span class="ttl">Best validation macro-F1 for each feature set and C</span>
+      <div class="cvd-chart" id="ch-tune"></div>
+      <figcaption>Each cell is the better of the two min_df settings (hover for both). The strongest blue marks the best score.</figcaption>
+    </figure>
+    <p>The best setting (word pairs, C = 1, min_df 2) reaches 0.743, +0.4 points over the setting used in model selection. With word pairs every C scores within 0.002 of each other; with single words, the weakest regularisation (C = 16) costs 1.6 points against the best C. Tuning does not change the ranking: fine-tuned SciBERT stays ahead.</p>
+  </section>
+
+  <!-- ===================================================== 07 -->
+  <section class="cvd-sec" id="evaluation">
+    <header><span class="num">07 · Evaluation</span><h2>0.777 macro-F1 on papers the models never saw</h2></header>
+    <div class="cvd-stats">
+      <div class="cvd-stat"><span class="v">0.777</span><span class="l">macro-F1 (95 % CI 0.759–0.793)</span></div>
+      <div class="cvd-stat"><span class="v">78.0%</span><span class="l">accuracy</span></div>
+      <div class="cvd-stat"><span class="v">91.2%</span><span class="l">top-2 accuracy</span></div>
+      <div class="cvd-stat"><span class="v">85.3%</span><span class="l">accuracy if a cross-listed field counts as right</span></div>
+    </div>
+    <p>The test set (2,098 papers) is used once, for Ensemble: SciBERT + TF-IDF LR. The confidence interval comes from 500 bootstrap resamples of the test papers.</p>
+    <figure class="cvd-fig">
+      <span class="ttl">Confusion matrix: where each true field's papers end up</span>
+      <div class="cvd-chart" id="ch-cm"></div>
+      <figcaption>Rows are true fields and add up to 100 %; the diagonal is the share classified correctly. Hover for paper counts.</figcaption>
+    </figure>
+    <figure class="cvd-fig">
+      <span class="ttl">Test F1 per field</span>
+      <div class="cvd-chart" id="ch-f1"></div>
+    </figure>
+    <p><strong>Where it goes wrong.</strong> The largest confusions are cs.AI → cs.CL (52), cs.AI → cs.LG (42), cs.LG → stat.ML (37), stat.ML → cs.LG (35): exactly the overlaps seen in the cross-listing chart. In 33% of the mistakes the predicted field is one the authors also listed, so these are often defensible answers rather than errors. The model is also less sure when it is wrong (mean confidence 0.59 vs 0.79 when right), which the decision policy uses.</p>
+    <div class="cvd-tablewrap"><table class="cvd-table">
+      <thead><tr><th>True</th><th>Predicted</th><th>Paper title</th><th>Also listed in</th></tr></thead>
+      <tbody>
+        <tr><td class="nowrap"><code>cs.AI</code></td><td class="nowrap"><code>cs.CL</code></td><td>Batched Speech Decisions Without Decoding: Single-Token Supervision Lets a Frozen LLM Hear Beyond the Transcri…</td><td>–</td></tr>
+        <tr><td class="nowrap"><code>cs.AI</code></td><td class="nowrap"><code>cs.LG</code></td><td>Functional Subnetwork Localization for Efficient Continual Learning in Large Language Models</td><td>–</td></tr>
+        <tr><td class="nowrap"><code>cs.LG</code></td><td class="nowrap"><code>stat.ML</code></td><td>VampPrior Unleashed</td><td>stat.ML</td></tr>
+        
+      </tbody>
+    </table></div>
+    <figure class="cvd-fig">
+      <span class="ttl">Map of the test abstracts (MiniLM sentence embeddings, t-SNE)</span>
+      <div class="cvd-chips" id="tsne-chips" role="group" aria-label="Highlight one field"></div>
+      <div class="cvd-chart" id="ch-tsne"></div>
+      <figcaption><b>Each dot is one test paper</b>, placed so that papers with similar abstracts sit close together; labels mark each field's centre. Click a field to highlight it. cs.RO, cs.IR and cs.CV form tight islands (83%, 73% and 64% of each paper's ten nearest neighbours share its field); cs.LG and cs.AI spread across the map (31% and 39%), the same fields with the lowest F1.</figcaption>
+    </figure>
+    <figure class="cvd-fig">
+      <span class="ttl">What the classical half of the ensemble looks at: highest-weight terms per field</span>
+      <div class="cvd-tablewrap"><table class="cvd-table">
+        <thead><tr><th>Field</th><th>Terms with the largest logistic-regression weights</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap"><code>cs.AI</code></td><td><div class="cvd-words"><span>agent</span><span>ai</span><span>agents</span><span>reasoning</span><span>llm</span><span>execution</span><span>actions</span><span>routing</span></div></td></tr>
+          <tr><td class="nowrap"><code>cs.CL</code></td><td><div class="cvd-words"><span>language</span><span>language models</span><span>text</span><span>llms</span><span>speech</span><span>languages</span><span>models</span><span>english</span></div></td></tr>
+          <tr><td class="nowrap"><code>cs.CV</code></td><td><div class="cvd-words"><span>image</span><span>video</span><span>visual</span><span>images</span><span>3d</span><span>vision</span><span>segmentation</span><span>scene</span></div></td></tr>
+          <tr><td class="nowrap"><code>cs.IR</code></td><td><div class="cvd-words"><span>retrieval</span><span>recommendation</span><span>user</span><span>item</span><span>query</span><span>ranking</span><span>recommender</span><span>search</span></div></td></tr>
+          <tr><td class="nowrap"><code>cs.LG</code></td><td><div class="cvd-words"><span>learning</span><span>training</span><span>neural</span><span>forecasting</span><span>transformer</span><span>regret</span><span>pretraining</span><span>networks</span></div></td></tr>
+          <tr><td class="nowrap"><code>cs.RO</code></td><td><div class="cvd-words"><span>robot</span><span>manipulation</span><span>robots</span><span>robotic</span><span>action</span><span>navigation</span><span>motion</span><span>success</span></div></td></tr>
+          <tr><td class="nowrap"><code>stat.ML</code></td><td><div class="cvd-words"><span>statistical</span><span>data</span><span>bayesian</span><span>regression</span><span>estimation</span><span>linear</span><span>stochastic</span><span>finite</span></div></td></tr>
+          
+        </tbody>
+      </table></div>
+      <figcaption>Sensible, readable signals: <em>agent</em> and <em>reasoning</em> for cs.AI, <em>robot</em> and <em>manipulation</em> for cs.RO, <em>bayesian</em> and <em>estimation</em> for stat.ML. Interpretability is one reason to keep TF-IDF in the ensemble.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ===================================================== 08 -->
+  <section class="cvd-sec" id="policy">
+    <header><span class="num">08 · Decision policy</span><h2>Suggest two fields; send the unsure to an editor</h2></header>
+    <p>A 78%-accurate classifier should not file papers on its own. Three rules make it useful anyway:</p>
+    <ul class="cvd-list">
+      <li><strong>Suggest, don't decide.</strong> Show authors the top two fields: the right one is among them 91.2% of the time.</li>
+      <li><strong>Automate only confident cases.</strong> Below a confidence threshold, the paper goes to a human moderator.</li>
+      <li><strong>Treat cross-listed answers as partial credit.</strong> A suggestion that matches a secondary category is useful, not wrong.</li>
+    </ul>
+    <figure class="cvd-fig">
+      <span class="ttl">Coverage against accuracy as the confidence threshold rises</span>
+      <div class="cvd-chart" id="ch-cov"></div>
+      <figcaption>Moving right raises the threshold: fewer papers are classified automatically, but those are classified more accurately. The dashed line marks a 95 % accuracy target, reached at confidence ≥ 0.87 with 36% of papers automated; at 90 % accuracy, 61% could be automated.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ===================================================== summary -->
+  <section class="cvd-sec" id="summary">
+    <header><span class="num">Summary</span><h2>What the pipeline delivers</h2></header>
+    <div class="cvd-tablewrap"><table class="cvd-table">
+      <tbody>
+        <tr><td><strong>Data</strong></td><td>14,000 arXiv abstracts (title + abstract), 7 categories × 2,000, 15 removed → 13,985</td></tr><tr><td><strong>EDA</strong></td><td>balanced classes; median abstract 179–199 words; 98% of stat.ML papers also listed in cs.LG</td></tr><tr><td><strong>Split</strong></td><td>stratified 70 / 15 / 15: train 9,789 / validation 2,098 / test 2,098</td></tr><tr><td><strong>Best classical model</strong></td><td>TF-IDF + Logistic Regression: validation macro-F1 0.739 in 22 s</td></tr><tr><td><strong>Best single model</strong></td><td>SciBERT (fine-tuned): 0.756, 7 min on a T4 GPU</td></tr><tr><td><strong>Final model</strong></td><td>Ensemble: SciBERT + TF-IDF LR (average of probabilities): validation macro-F1 0.762</td></tr><tr><td><strong>Test quality</strong></td><td>macro-F1 0.777 (95 % CI 0.759–0.793), accuracy 78.0%, top-2 91.2%</td></tr><tr><td><strong>Decision policy</strong></td><td>show the top two fields; automate only when confidence ≥ 0.87 (36% of papers at 95.5% accuracy)</td></tr>
+      </tbody>
+    </table></div>
+    <h3>Lessons</h3>
+    <ul class="cvd-list">
+      <li>TF-IDF with logistic regression is the baseline to beat: 0.739 in seconds, interpretable, and better than neural networks trained from scratch on 10,000 texts.</li>
+      <li>Pretraining is what makes neural models win, and domain matters: SciBERT beats DistilBERT.</li>
+      <li>A cheap ensemble of a transformer and a word-count model adds a little more, because they look at different things.</li>
+      <li>The ceiling is set by the labels: many papers belong to two fields, so top-2 accuracy and cross-listing tell more than accuracy alone.</li>
+    </ul>
+    <h3>Limitations and next steps</h3>
+    <ul class="cvd-list">
+      <li><strong>Time confound.</strong> Fields cover windows from 16 to 232 days; sampling all fields from the same weeks would make the comparison cleaner.</li>
+      <li><strong>Multi-label.</strong> Predicting every category a paper is listed in (multi-label classification) matches the real task better than one label.</li>
+      <li><strong>One run, one split.</strong> Transformer scores vary between runs; several seeds or cross-validation would tighten the comparison.</li>
+      <li><strong>More text.</strong> Only title and abstract are used; the introduction or references would add signal.</li>
+    </ul>
+    <footer class="cvd-foot">
+      <p><strong>Reproduce.</strong> Open <code>NLP_ArxivPaperClassification.ipynb</code> in Google Colab, choose a T4 GPU runtime and run all cells (about 35 minutes). Upload <code>data/arxiv_abstracts.csv</code> to reuse the same papers; without it the notebook collects new ones from the arXiv API. Figures go to <code>results_nlp/figures/</code>, all numbers to <code>results_nlp/metrics.json</code>.</p>
+      <pre>pip install scikit-learn tensorflow torch transformers sentence-transformers pandas seaborn</pre>
+      <p>Thank you to arXiv for use of its open access interoperability. Models: BERT (Devlin et al., 2019), DistilBERT (Sanh et al., 2019), SciBERT (Beltagy, Lo &amp; Cohan, 2019), all-MiniLM-L6-v2 (sentence-transformers), all via Hugging Face.</p>
+    </footer>
+  </section>
+
+</div>
+</article>
+<div class="cvd-tip" role="tooltip" hidden></div>
+<script type="application/json" id="cvd-data">{"classes":["cs.AI","cs.CL","cs.CV","cs.IR","cs.LG","cs.RO","stat.ML"],"names":{"cs.AI":"Artificial Intelligence","cs.CL":"Computation & Language (NLP)","cs.CV":"Computer Vision","cs.IR":"Information Retrieval","cs.LG":"Machine Learning","cs.RO":"Robotics","stat.ML":"Statistics \u2014 Machine Learning"},"short":{"Ensemble: SciBERT + TF-IDF LR":"Ensemble","SciBERT (fine-tuned)":"SciBERT","DistilBERT (fine-tuned)":"DistilBERT","TF-IDF + Logistic Regression":"TF-IDF + LR","TF-IDF + Linear SVM":"TF-IDF + SVM","TF-IDF + Naive Bayes":"TF-IDF + NB","MiniLM embeddings + LR":"MiniLM + LR","TextCNN (from scratch)":"TextCNN","BiLSTM (from scratch)":"BiLSTM","Majority class":"Majority class"},"selection":[{"model":"Ensemble: SciBERT + TF-IDF LR","family":"ensemble","val_acc":0.76597,"val_macro_f1":0.76207,"train_s":465.40325,"params_m":111.0409,"ms_per_doc":3.61912},{"model":"SciBERT (fine-tuned)","family":"fine-tuned","val_acc":0.76072,"val_macro_f1":0.75608,"train_s":443.01027,"params_m":109.92385,"ms_per_doc":3.60959},{"model":"TF-IDF + Logistic Regression","family":"classical","val_acc":0.74071,"val_macro_f1":0.73853,"train_s":22.39298,"params_m":1.11705,"ms_per_doc":0.00953},{"model":"TF-IDF + Linear SVM","family":"classical","val_acc":0.74309,"val_macro_f1":0.73709,"train_s":0.57176,"params_m":1.11705,"ms_per_doc":0.00185},{"model":"DistilBERT (fine-tuned)","family":"fine-tuned","val_acc":0.74214,"val_macro_f1":0.73409,"train_s":227.71526,"params_m":66.95886,"ms_per_doc":1.79984},{"model":"MiniLM embeddings + LR","family":"pretrained-frozen","val_acc":0.72593,"val_macro_f1":0.72439,"train_s":42.92869,"params_m":22.71322,"ms_per_doc":3.06962},{"model":"TextCNN (from scratch)","family":"scratch","val_acc":0.72307,"val_macro_f1":0.72223,"train_s":56.42152,"params_m":3.92295,"ms_per_doc":0.09946},{"model":"TF-IDF + Naive Bayes","family":"classical","val_acc":0.72021,"val_macro_f1":0.70064,"train_s":0.03446,"params_m":1.11705,"ms_per_doc":0.00298},{"model":"BiLSTM (from scratch)","family":"scratch","val_acc":0.67016,"val_macro_f1":0.65665,"train_s":27.86091,"params_m":3.93972,"ms_per_doc":0.30603},{"model":"Majority class","family":"baseline","val_acc":0.14299,"val_macro_f1":0.03574,"train_s":0.0,"params_m":0.0,"ms_per_doc":0.0}],"winner":"Ensemble: SciBERT + TF-IDF LR","curves":{"TextCNN (from scratch)":{"val_macro_f1":[0.5902304361058521,0.6909288932507878,0.7206878353006864,0.7222308595379794,0.717268679195998,0.7119167842218656],"val_acc":[0.6143946647644043,0.6968541741371155,0.7235462069511414,0.7230696082115173,0.7183031439781189,0.711153507232666],"train_acc":[0.35274288058280945,0.6409235000610352,0.7173357605934143,0.7967106103897095,0.8594340682029724,0.9191949963569641]},"BiLSTM (from scratch)":{"val_macro_f1":[0.580772617387022,0.6428637187153051,0.6566488037363388,0.6793044843043209,0.672048756447868],"val_acc":[0.6148713231086731,0.6530028581619263,0.6701620817184448,0.6773117184638977,0.6744518876075745],"train_acc":[0.42987024784088135,0.6441924571990967,0.7457349896430969,0.82010418176651,0.8611707091331482]},"DistilBERT (fine-tuned)":{"val_macro_f1":[0.7314462356169446,0.7340863006776744,0.7328138301807423]},"SciBERT (fine-tuned)":{"val_macro_f1":[0.7465106994867581,0.7560800919549097,0.7553872506230283]}},"pc":{"Ensemble: SciBERT + TF-IDF LR":{"cs.AI":0.5468,"cs.CL":0.6992,"cs.CV":0.8416,"cs.IR":0.9008,"cs.LG":0.595,"cs.RO":0.9103,"stat.ML":0.8409},"SciBERT (fine-tuned)":{"cs.AI":0.5343,"cs.CL":0.689,"cs.CV":0.8374,"cs.IR":0.8882,"cs.LG":0.597,"cs.RO":0.9052,"stat.ML":0.8414},"TF-IDF + Logistic Regression":{"cs.AI":0.5333,"cs.CL":0.6486,"cs.CV":0.843,"cs.IR":0.8948,"cs.LG":0.5331,"cs.RO":0.9013,"stat.ML":0.8155},"TF-IDF + Linear SVM":{"cs.AI":0.5359,"cs.CL":0.6441,"cs.CV":0.8458,"cs.IR":0.8907,"cs.LG":0.5152,"cs.RO":0.9035,"stat.ML":0.8245},"DistilBERT (fine-tuned)":{"cs.AI":0.5326,"cs.CL":0.6586,"cs.CV":0.8235,"cs.IR":0.8858,"cs.LG":0.5009,"cs.RO":0.91,"stat.ML":0.8273},"MiniLM embeddings + LR":{"cs.AI":0.5197,"cs.CL":0.6547,"cs.CV":0.8087,"cs.IR":0.86,"cs.LG":0.534,"cs.RO":0.8976,"stat.ML":0.7961},"TextCNN (from scratch)":{"cs.AI":0.5557,"cs.CL":0.6435,"cs.CV":0.7974,"cs.IR":0.86,"cs.LG":0.5155,"cs.RO":0.8788,"stat.ML":0.8048},"TF-IDF + Naive Bayes":{"cs.AI":0.528,"cs.CL":0.6269,"cs.CV":0.8165,"cs.IR":0.8666,"cs.LG":0.4,"cs.RO":0.8688,"stat.ML":0.7978},"BiLSTM (from scratch)":{"cs.AI":0.2766,"cs.CL":0.5855,"cs.CV":0.7862,"cs.IR":0.8444,"cs.LG":0.4497,"cs.RO":0.8606,"stat.ML":0.7936}},"tuning":[{"ngrams":"1-2","C":1,"min_df":2,"val_macro_f1":0.74266},{"ngrams":"1-2","C":16,"min_df":2,"val_macro_f1":0.74206},{"ngrams":"1-2","C":1,"min_df":5,"val_macro_f1":0.74193},{"ngrams":"1-1","C":4,"min_df":2,"val_macro_f1":0.7415},{"ngrams":"1-2","C":4,"min_df":5,"val_macro_f1":0.74098},{"ngrams":"1-2","C":4,"min_df":2,"val_macro_f1":0.74079},{"ngrams":"1-1","C":4,"min_df":5,"val_macro_f1":0.7384},{"ngrams":"1-2","C":16,"min_df":5,"val_macro_f1":0.73801},{"ngrams":"1-1","C":1,"min_df":2,"val_macro_f1":0.73517},{"ngrams":"1-1","C":1,"min_df":5,"val_macro_f1":0.73479},{"ngrams":"1-1","C":16,"min_df":2,"val_macro_f1":0.72503},{"ngrams":"1-1","C":16,"min_df":5,"val_macro_f1":0.71971}],"confusion":[[163,52,14,18,42,7,4],[34,213,7,18,27,0,0],[3,3,261,5,9,18,1],[10,10,2,273,4,0,1],[34,17,17,7,187,1,37],[7,0,8,0,1,284,0],[4,4,0,0,35,0,256]],"per_class_f1":{"cs.AI":0.5874,"cs.CL":0.7124,"cs.CV":0.8571,"cs.IR":0.8792,"cs.LG":0.6182,"cs.RO":0.9311,"stat.ML":0.8562},"tsne":{"x":[10.420000076293945,46.2599983215332,43.65999984741211,-52.4900016784668,15.079999923706055,24.579999923706055,45.91999816894531,-34.709999084472656,-48.33000183105469,1.7300000190734863,-19.25,-53.880001068115234,-22.90999984741211,52.70000076293945,52.06999969482422,-5.0,-45.849998474121094,-9.84000015258789,-36.560001373291016,-24.360000610351562,35.599998474121094,7.409999847412109,-29.290000915527344,25.010000228881836,42.369998931884766,-22.200000762939453,12.15999984741211,-5.559999942779541,9.680000305175781,33.75,-20.280000686645508,-20.06999969482422,47.9900016784668,-26.920000076293945,-17.530000686645508,-45.13999938964844,-4.789999961853027,7.090000152587891,8.960000038146973,-24.280000686645508,10.84000015258789,-57.880001068115234,54.86000061035156,-11.930000305175781,10.270000457763672,-33.83000183105469,41.81999969482422,-26.56999969482422,-25.59000015258789,-43.7400016784668,-38.66999816894531,37.209999084472656,19.15999984741211,17.09000015258789,17.860000610351562,32.040000915527344,52.86000061035156,-3.930000066757202,2.609999895095825,31.290000915527344,-23.25,-14.229999542236328,2.119999885559082,18.989999771118164,-17.459999084472656,-22.969999313354492,-16.270000457763672,21.020000457763672,5.28000020980835,38.959999084472656,12.319999694824219,27.329999923706055,-41.540000915527344,22.829999923706055,23.670000076293945,40.20000076293945,31.670000076293945,33.77000045776367,18.6299991607666,-39.709999084472656,-32.86000061035156,-2.700000047683716,-10.239999771118164,46.58000183105469,36.83000183105469,39.45000076293945,8.350000381469727,-9.979999542236328,35.369998931884766,-47.25,-57.849998474121094,24.8700008392334,25.760000228881836,-1.940000057220459,-20.200000762939453,17.760000228881836,-58.22999954223633,-2.7300000190734863,20.520000457763672,-10.75,-57.279998779296875,-42.45000076293945,-21.0,5.670000076293945,-11.710000038146973,29.5,-42.15999984741211,1.5499999523162842,-7.789999961853027,-20.860000610351562,-1.8799999952316284,10.399999618530273,-30.170000076293945,8.470000267028809,-14.510000228881836,-34.34000015258789,-11.760000228881836,17.540000915527344,-33.900001525878906,-6.489999771118164,23.399999618530273,-10.430000305175781,36.79999923706055,-26.56999969482422,14.949999809265137,40.04999923706055,10.279999732971191,30.549999237060547,55.060001373291016,10.149999618530273,26.90999984741211,-55.060001373291016,-46.560001373291016,-20.829999923706055,-43.20000076293945,-25.040000915527344,15.170000076293945,53.09000015258789,59.20000076293945,0.3499999940395355,45.83000183105469,-29.729999542236328,-10.0600004196167,16.1200008392334,30.389999389648438,16.920000076293945,-10.029999732971191,-29.209999084472656,-16.670000076293945,16.31999969482422,-35.95000076293945,-4.300000190734863,7.110000133514404,17.200000762939453,22.190000534057617,-45.400001525878906,-28.809999465942383,8.699999809265137,55.459999084472656,-5.610000133514404,-17.989999771118164,-18.5,-43.349998474121094,7.650000095367432,18.389999389648438,31.850000381469727,-40.09000015258789,8.130000114440918,22.6299991607666,-47.83000183105469,13.579999923706055,-16.579999923706055,-12.760000228881836,50.150001525878906,-10.220000267028809,21.920000076293945,-22.139999389648438,-18.110000610351562,-41.650001525878906,-28.920000076293945,-4.900000095367432,-5.820000171661377,0.8899999856948853,48.779998779296875,28.790000915527344,31.950000762939453,49.150001525878906,-49.560001373291016,41.65999984741211,-27.510000228881836,47.04999923706055,3.7699999809265137,-25.6200008392334,-24.639999389648438,23.729999542236328,-41.86000061035156,12.109999656677246,30.290000915527344,39.0099983215332,35.81999969482422,21.8700008392334,6.579999923706055,14.989999771118164,-15.699999809265137,-51.2599983215332,32.7599983215332,-18.3799991607666,1.4700000286102295,-10.109999656677246,-17.799999237060547,-14.989999771118164,-24.139999389648438,8.210000038146973,-20.059999465942383,52.619998931884766,25.399999618530273,54.02000045776367,-4.539999961853027,-8.470000267028809,-3.75,30.350000381469727,-45.86000061035156,-42.689998626708984,11.109999656677246,-26.06999969482422,-22.829999923706055,-4.239999771118164,-1.2000000476837158,-40.0099983215332,-26.139999389648438,5.449999809265137,-7.46999979019165,16.239999771118164,30.989999771118164,-23.739999771118164,-2.2300000190734863,-9.779999732971191,15.25,-9.479999542236328,-5.880000114440918,-13.75,-45.959999084472656,-24.350000381469727,-11.140000343322754,38.959999084472656,27.06999969482422,-0.46000000834465027,37.79999923706055,34.68000030517578,-22.219999313354492,-10.890000343322754,-11.3100004196167,-15.020000457763672,41.40999984741211,-34.310001373291016,-44.02000045776367,-44.43000030517578,-13.979999542236328,4.78000020980835,-37.52000045776367,-53.83000183105469,38.779998779296875,-41.38999938964844,-23.06999969482422,9.930000305175781,-54.20000076293945,-7.550000190734863,9.029999732971191,3.119999885559082,-30.420000076293945,40.36000061035156,26.780000686645508,-21.649999618530273,21.719999313354492,57.599998474121094,-3.309999942779541,-55.650001525878906,41.86000061035156,21.06999969482422,-21.030000686645508,-23.969999313354492,-13.770000457763672,11.859999656677246,26.030000686645508,19.219999313354492,23.760000228881836,-5.010000228881836,-26.290000915527344,-38.5099983215332,-2.069999933242798,-1.590000033378601,-50.029998779296875,-48.290000915527344,-49.02000045776367,0.7699999809265137,56.90999984741211,-13.170000076293945,12.720000267028809,-54.779998779296875,-7.699999809265137,-15.680000305175781,-38.56999969482422,48.380001068115234,-3.7200000286102295,-49.54999923706055,-35.060001373291016,-21.969999313354492,-40.93000030517578,13.369999885559082,47.5,-17.06999969482422,-57.060001373291016,8.819999694824219,50.279998779296875,-49.709999084472656,58.18000030517578,-28.649999618530273,25.149999618530273,29.3799991607666,-10.319999694824219,32.939998626708984,4.840000152587891,9.920000076293945,-7.760000228881836,-1.75,-39.369998931884766,-16.229999542236328,9.15999984741211,43.47999954223633,1.1299999952316284,23.149999618530273,-37.88999938964844,25.1200008392334,29.15999984741211,50.470001220703125,3.1700000762939453,2.5399999618530273,-24.889999389648438,-46.91999816894531,-24.739999771118164,16.399999618530273,-7.96999979019165,-7.590000152587891,55.29999923706055,18.43000030517578,35.90999984741211,44.65999984741211,-43.2400016784668,-12.119999885559082,15.140000343322754,-28.5,-17.329999923706055,-29.850000381469727,-16.760000228881836,-38.470001220703125,29.06999969482422,-16.239999771118164,39.2400016784668,-15.15999984741211,7.769999980926514,23.84000015258789,19.700000762939453,31.8799991607666,18.450000762939453,-9.489999771118164,-53.20000076293945,-12.600000381469727,54.90999984741211,-13.460000038146973,-24.049999237060547,4.010000228881836,-3.700000047683716,-35.09000015258789,56.88999938964844,-9.600000381469727,-50.5099983215332,-17.309999465942383,44.06999969482422,0.11999999731779099,21.100000381469727,-51.58000183105469,-31.229999542236328,-53.11000061035156,41.2599983215332,29.920000076293945,-9.899999618530273,-14.84000015258789,-23.420000076293945,16.530000686645508,-24.850000381469727,-37.970001220703125,4.610000133514404,-30.09000015258789,49.029998779296875,53.31999969482422,47.970001220703125,5.010000228881836,49.7599983215332,-21.239999771118164,46.119998931884766,22.5,-26.959999084472656,34.2599983215332,-7.159999847412109,41.91999816894531,8.65999984741211,-58.91999816894531,-33.68000030517578,10.949999809265137,33.72999954223633,-27.229999542236328,-9.470000267028809,49.470001220703125,15.420000076293945,8.010000228881836,37.61000061035156,-12.050000190734863,-11.960000038146973,-13.949999809265137,-17.90999984741211,57.279998779296875,-13.260000228881836,19.290000915527344,-47.5,20.59000015258789,11.1899995803833,-21.3799991607666,-45.709999084472656,12.760000228881836,-3.7899999618530273,28.889999389648438,-25.809999465942383,48.66999816894531,-13.229999542236328,-17.0,-3.619999885559082,-10.029999732971191,20.809999465942383,22.040000915527344,55.869998931884766,-40.689998626708984,-27.440000534057617,-45.36000061035156,-22.520000457763672,29.40999984741211,49.959999084472656,-24.600000381469727,24.700000762939453,-7.46999979019165,-23.6200008392334,-10.100000381469727,-27.690000534057617,-12.729999542236328,12.489999771118164,53.63999938964844,52.290000915527344,-11.9399995803833,-34.369998931884766,-10.779999732971191,-60.75,61.11000061035156,23.06999969482422,2.069999933242798,-13.420000076293945,-20.940000534057617,-12.229999542236328,-4.340000152587891,20.1200008392334,-25.299999237060547,31.209999084472656,-39.15999984741211,37.959999084472656,-18.31999969482422,1.649999976158142,-48.02000045776367,-14.210000038146973,10.09000015258789,-59.029998779296875,51.349998474121094,-13.359999656677246,9.949999809265137,53.2599983215332,11.050000190734863,31.559999465942383,15.640000343322754,-21.649999618530273,-13.3100004196167,-55.970001220703125,-0.009999999776482582,15.640000343322754,-19.84000015258789,-41.849998474121094,6.340000152587891,-50.369998931884766,-11.9399995803833,-21.15999984741211,-11.489999771118164,9.100000381469727,-37.880001068115234,-15.670000076293945,18.030000686645508,34.63999938964844,-9.1899995803833,23.93000030517578,49.88999938964844,-3.5799999237060547,-43.5099983215332,-26.15999984741211,-0.7699999809265137,-3.8299999237060547,-48.06999969482422,-14.130000114440918,-17.18000030517578,20.639999389648438,5.460000038146973,-36.349998474121094,15.619999885559082,-11.1899995803833,37.689998626708984,7.889999866485596,-12.800000190734863,-54.47999954223633,61.209999084472656,49.25,-14.0600004196167,-23.1299991607666,56.5,-52.459999084472656,32.0,14.3100004196167,-10.289999961853027,-28.610000610351562,-11.800000190734863,-14.850000381469727,-47.83000183105469,9.369999885559082,0.4099999964237213,-2.700000047683716,-29.920000076293945,31.469999313354492,-14.520000457763672,-20.8700008392334,37.16999816894531,-4.21999979019165,13.5600004196167,-33.34000015258789,38.0,55.310001373291016,18.93000030517578,10.34000015258789,37.79999923706055,-25.31999969482422,-3.2799999713897705,10.020000457763672,12.710000038146973,-14.640000343322754,51.209999084472656,-31.139999389648438,21.520000457763672,-13.5600004196167,16.809999465942383,1.600000023841858,3.9700000286102295,10.65999984741211,-17.90999984741211,-18.200000762939453,-17.280000686645508,57.36000061035156,-18.229999542236328,54.220001220703125,3.309999942779541,1.840000033378601,-20.3799991607666,13.25,-9.579999923706055,6.409999847412109,-40.47999954223633,-33.66999816894531,51.86000061035156,15.670000076293945,-15.399999618530273,-22.959999084472656,0.6399999856948853,34.619998931884766,-14.760000228881836,-18.780000686645508,-10.890000343322754,-40.599998474121094,-35.790000915527344,20.229999542236328,-39.08000183105469,-10.630000114440918,-22.270000457763672,-3.619999885559082,-54.369998931884766,-15.460000038146973,5.550000190734863,-12.699999809265137,-34.470001220703125,32.15999984741211,16.860000610351562,9.979999542236328,42.9900016784668,5.809999942779541,-8.390000343322754,-0.7300000190734863,-30.139999389648438,34.77000045776367,-50.18000030517578,23.239999771118164,16.690000534057617,55.459999084472656,-22.8799991607666,2.6500000953674316,-12.289999961853027,-4.550000190734863,27.010000228881836,11.460000038146973,-19.850000381469727,17.25,28.049999237060547,-25.239999771118164,0.6800000071525574,44.09000015258789,-32.33000183105469,30.139999389648438,34.2599983215332,31.959999084472656,-28.6200008392334,32.459999084472656,-7.090000152587891,12.0600004196167,54.13999938964844,-8.510000228881836,-7.900000095367432,1.350000023841858,-20.31999969482422,2.4200000762939453,31.649999618530273,13.779999732971191,28.049999237060547,-20.700000762939453,-15.010000228881836,-28.719999313354492,-10.5600004196167,40.43000030517578,-8.609999656677246,-47.040000915527344,7.639999866485596,-37.040000915527344,-16.309999465942383,19.489999771118164,-32.459999084472656,-11.989999771118164,35.84000015258789,7.289999961853027,-14.899999618530273,40.56999969482422,-3.0799999237060547,-18.959999084472656,21.639999389648438,-3.809999942779541,59.720001220703125,-31.780000686645508,21.93000030517578,-54.810001373291016,21.31999969482422,-47.08000183105469,58.56999969482422,13.140000343322754,-59.97999954223633,14.869999885559082,61.75,51.279998779296875,-1.7300000190734863,-28.6200008392334,29.219999313354492,33.880001068115234,-19.329999923706055,20.450000762939453,-56.45000076293945,-39.43000030517578,-31.459999084472656,-11.460000038146973,-37.970001220703125,-56.20000076293945,-20.75,-4.679999828338623,-3.440000057220459,46.38999938964844,-38.939998626708984,-2.2899999618530273,-19.25,-17.219999313354492,7.150000095367432,35.380001068115234,33.369998931884766,13.25,-2.509999990463257,-8.65999984741211,12.609999656677246,-13.579999923706055,-19.110000610351562,10.680000305175781,50.2599983215332,-57.15999984741211,-29.010000228881836,14.729999542236328,-12.050000190734863,5.539999961853027,38.56999969482422,21.350000381469727,-7.96999979019165,-22.84000015258789,32.93000030517578,3.0899999141693115,49.29999923706055,25.790000915527344,-3.2899999618530273,23.649999618530273,-16.690000534057617,7.510000228881836,53.4900016784668,-36.27000045776367,-56.400001525878906,53.279998779296875,-5.920000076293945,-31.84000015258789,-17.219999313354492,24.299999237060547,7.840000152587891,32.56999969482422,-25.729999542236328,38.68000030517578,2.0899999141693115,-20.889999389648438,32.06999969482422,-5.690000057220459,32.09000015258789,24.139999389648438,0.029999999329447746,-24.149999618530273,-50.93000030517578,3.2200000286102295,24.25,-38.33000183105469,15.5600004196167,44.630001068115234,52.119998931884766,-23.290000915527344,-21.579999923706055,20.040000915527344,-24.06999969482422,-48.209999084472656,-16.34000015258789,33.0099983215332,40.90999984741211,-12.949999809265137,-16.479999542236328,19.969999313354492,-5.849999904632568,3.0799999237060547,29.899999618530273,31.030000686645508,-20.920000076293945,25.479999542236328,-5.480000019073486,-22.1299991607666,12.380000114440918,-38.630001068115234,-10.710000038146973,-1.7699999809265137,-15.680000305175781,42.97999954223633,-17.65999984741211,-25.440000534057617,-47.9900016784668,-52.77000045776367,-25.610000610351562,41.61000061035156,-20.739999771118164,26.540000915527344,53.52000045776367,-8.59000015258789,15.260000228881836,11.289999961853027,-59.0,19.520000457763672,10.010000228881836,35.68000030517578,-38.70000076293945,16.25,8.0600004196167,-24.56999969482422,29.56999969482422,-37.2599983215332,38.2599983215332,22.360000610351562,-46.7400016784668,-4.25,-40.75,-23.489999771118164,52.27000045776367,57.56999969482422,-6.099999904632568,7.119999885559082,56.91999816894531,43.099998474121094,29.889999389648438,53.41999816894531,-44.040000915527344,-27.450000762939453,40.04999923706055,14.800000190734863,-52.2400016784668,18.459999084472656,20.850000381469727,9.899999618530273,13.699999809265137,-13.470000267028809,14.079999923706055,16.510000228881836,32.47999954223633,29.149999618530273,-13.229999542236328,19.010000228881836,19.979999542236328,-0.6600000262260437,14.140000343322754,40.150001525878906,5.110000133514404,56.15999984741211,-2.7100000381469727,33.70000076293945,16.649999618530273,-3.890000104904175,24.940000534057617,-9.859999656677246,-40.599998474121094,-38.2599983215332,36.130001068115234,40.220001220703125,1.4800000190734863,48.689998626708984,-11.4399995803833,20.170000076293945,55.060001373291016,46.060001373291016,-52.0099983215332,-14.15999984741211,25.18000030517578,24.8700008392334,32.849998474121094,-45.77000045776367,19.290000915527344,-13.279999732971191,-32.16999816894531,34.18000030517578,37.2599983215332,16.940000534057617,-12.539999961853027,16.579999923706055,-60.77000045776367,20.479999542236328,44.310001373291016,16.690000534057617,14.880000114440918,-6.559999942779541,-12.359999656677246,-2.680000066757202,9.149999618530273,24.6200008392334,-5.769999980926514,47.790000915527344,0.2800000011920929,1.090000033378601,-15.449999809265137,-45.900001525878906,-46.63999938964844,27.540000915527344,32.0099983215332,-0.6100000143051147,-42.83000183105469,33.15999984741211,7.699999809265137,35.16999816894531,-52.220001220703125,-8.899999618530273,-20.639999389648438,38.459999084472656,9.15999984741211,-4.78000020980835,4.110000133514404,14.479999542236328,-51.189998626708984,-41.09000015258789,17.209999084472656,30.950000762939453,-38.439998626708984,-2.7200000286102295,-23.75,-26.81999969482422,-43.29999923706055,2.9000000953674316,-48.060001373291016,-57.619998931884766,23.889999389648438,-60.81999969482422,12.180000305175781,-32.9900016784668,28.649999618530273,0.07999999821186066,32.349998474121094,-10.539999961853027,15.479999542236328,-4.710000038146973,-19.899999618530273,28.059999465942383,-34.439998626708984,-14.59000015258789,1.5,31.329999923706055,20.559999465942383,-6.920000076293945,25.270000457763672,-42.2400016784668,10.479999542236328,49.90999984741211,4.550000190734863,-14.069999694824219,-35.209999084472656,25.93000030517578,-43.43000030517578,50.849998474121094,38.290000915527344,18.219999313354492,36.36000061035156,-48.79999923706055,19.06999969482422,25.290000915527344,23.399999618530273,7.349999904632568,33.58000183105469,-60.20000076293945,-12.420000076293945,6.199999809265137,-46.25,28.100000381469727,-17.84000015258789,-13.300000190734863,37.310001373291016,37.060001373291016,-22.350000381469727,37.560001373291016,-15.979999542236328,15.899999618530273,43.11000061035156,-12.529999732971191,-26.270000457763672,1.940000057220459,16.59000015258789,38.40999984741211,-49.70000076293945,-23.139999389648438,-54.04999923706055,-30.079999923706055,4.210000038146973,27.100000381469727,16.59000015258789,37.400001525878906,-15.449999809265137,11.579999923706055,34.290000915527344,16.280000686645508,43.41999816894531,-3.430000066757202,-55.619998931884766,27.049999237060547,36.79999923706055,37.310001373291016,33.88999938964844,-26.760000228881836,7.360000133514404,-44.560001373291016,32.68000030517578,-26.040000915527344,-37.97999954223633,-45.97999954223633,-23.520000457763672,-10.930000305175781,-50.849998474121094,38.79999923706055,-12.800000190734863,18.690000534057617,47.599998474121094,60.13999938964844,3.509999990463257,3.25,-13.279999732971191,-49.720001220703125,17.6299991607666,34.27000045776367,36.11000061035156,1.0099999904632568,-6.789999961853027,38.869998931884766,35.20000076293945,-28.790000915527344,10.180000305175781,-9.489999771118164,37.83000183105469,-42.7599983215332,21.989999771118164,24.899999618530273,20.719999313354492,39.959999084472656,59.9900016784668,-21.510000228881836,28.940000534057617,-12.289999961853027,37.65999984741211,-14.829999923706055,-7.559999942779541,-45.54999923706055,-44.310001373291016,-27.219999313354492,24.829999923706055,-20.489999771118164,19.31999969482422,-20.850000381469727,-47.599998474121094,-30.790000915527344,4.289999961853027,-0.6200000047683716,-13.569999694824219,-40.5,-19.979999542236328,14.880000114440918,-49.540000915527344,-16.920000076293945,59.189998626708984,-10.600000381469727,-21.170000076293945,-36.22999954223633,-2.759999990463257,35.2599983215332,-7.5,-19.270000457763672,49.9900016784668,-15.9399995803833,-26.06999969482422,26.440000534057617,-6.570000171661377,12.760000228881836,11.600000381469727,-39.36000061035156,-26.040000915527344,-15.3100004196167,-0.6100000143051147,-41.119998931884766,-10.100000381469727,-49.970001220703125,19.040000915527344,-13.489999771118164,35.939998626708984,-15.90999984741211,-48.279998779296875,21.920000076293945,-56.91999816894531,7.400000095367432,-22.799999237060547,-20.899999618530273,39.7400016784668,26.489999771118164,2.0199999809265137,38.9900016784668,27.75,-11.949999809265137,28.0,-37.619998931884766,-4.739999771118164,-23.770000457763672,40.599998474121094,-50.68000030517578,11.460000038146973,-26.40999984741211,-33.790000915527344,-18.399999618530273,-31.8799991607666,-22.65999984741211,-18.760000228881836,-12.539999961853027,43.15999984741211,21.260000228881836,-20.6200008392334,21.1299991607666,36.54999923706055,19.709999084472656,45.61000061035156,36.369998931884766,26.170000076293945,-49.599998474121094,35.45000076293945,30.860000610351562,-7.909999847412109,41.689998626708984,4.269999980926514,-30.469999313354492,-40.380001068115234,13.329999923706055,22.290000915527344,-35.25,-13.710000038146973,-3.9000000953674316,23.729999542236328,-36.189998626708984,46.75,17.770000457763672,48.040000915527344,-17.809999465942383,10.210000038146973,-5.78000020980835,11.239999771118164,34.689998626708984,-42.43000030517578,-41.529998779296875,40.52000045776367,-32.86000061035156,-36.72999954223633,28.959999084472656,-7.019999980926514,-0.7599999904632568,-38.880001068115234,-13.279999732971191,-41.970001220703125,-16.709999084472656,51.970001220703125,-23.059999465942383,33.060001373291016,-15.130000114440918,12.380000114440918,-18.600000381469727,30.440000534057617,-50.81999969482422,0.17000000178813934,-37.939998626708984,20.229999542236328,29.010000228881836,58.15999984741211,55.77000045776367,-7.170000076293945,35.810001373291016,30.229999542236328,29.860000610351562,-15.630000114440918,15.550000190734863,57.099998474121094,39.790000915527344,15.170000076293945,26.520000457763672,30.559999465942383,-10.180000305175781,-41.119998931884766,55.849998474121094,-44.939998626708984,7.869999885559082,-12.130000114440918,-6.860000133514404,21.530000686645508,-8.84000015258789,-59.93000030517578,26.670000076293945,37.650001525878906,26.719999313354492,24.950000762939453,-18.530000686645508,21.889999389648438,-4.119999885559082,-15.0600004196167,62.2599983215332,-37.439998626708984,-24.459999084472656,-27.959999084472656,20.479999542236328,30.010000228881836,-3.390000104904175,25.850000381469727,-13.789999961853027,-44.709999084472656,-10.550000190734863,14.770000457763672,-4.730000019073486,9.420000076293945,-12.59000015258789,33.33000183105469,-16.309999465942383,16.530000686645508,-21.329999923706055,-11.3100004196167,-32.779998779296875,28.489999771118164,26.84000015258789,-16.709999084472656,-17.190000534057617,-21.40999984741211,29.639999389648438,17.68000030517578,15.319999694824219,-8.199999809265137,33.41999816894531,1.350000023841858,-43.54999923706055,45.31999969482422,-29.56999969482422,13.729999542236328,32.849998474121094,-28.850000381469727,42.54999923706055,-27.969999313354492,1.5,33.41999816894531,-22.459999084472656,-11.140000343322754,-46.58000183105469,-0.3100000023841858,-7.699999809265137,3.859999895095825,17.809999465942383,-28.389999389648438,-18.239999771118164,6.940000057220459,36.91999816894531,-36.189998626708984,-49.849998474121094,-42.29999923706055,38.33000183105469,-27.59000015258789,-52.06999969482422,21.31999969482422,-5.03000020980835,10.329999923706055,-57.86000061035156,50.95000076293945,-4.090000152587891,7.510000228881836,-12.430000305175781,0.0,-57.529998779296875,11.770000457763672,-27.440000534057617,29.399999618530273,-44.97999954223633,-28.399999618530273,-7.460000038146973,-15.550000190734863,-19.290000915527344,-17.170000076293945,8.989999771118164,46.880001068115234,0.6600000262260437,-7.980000019073486,20.31999969482422,26.899999618530273,-53.2400016784668,-24.8700008392334,-14.489999771118164,40.869998931884766,-7.900000095367432,-19.520000457763672,-20.940000534057617,13.640000343322754,31.700000762939453,-46.08000183105469,13.34000015258789,-14.130000114440918,46.91999816894531,-49.4900016784668,2.9800000190734863,-46.97999954223633,10.199999809265137,2.4100000858306885,47.11000061035156,-43.40999984741211,20.479999542236328,16.780000686645508,9.5600004196167,-10.239999771118164,14.140000343322754,-48.189998626708984,22.639999389648438,-29.010000228881836,-36.869998931884766,13.569999694824219,-8.170000076293945,20.59000015258789,-15.75,31.959999084472656,37.02000045776367,1.8899999856948853,-27.75,47.08000183105469,-35.79999923706055,16.059999465942383,-19.350000381469727,17.670000076293945,-48.7400016784668,-12.770000457763672,-15.65999984741211,54.0,27.579999923706055,-50.09000015258789,-29.520000457763672,-8.350000381469727,-17.0,-13.229999542236328,-3.680000066757202,34.290000915527344,5.96999979019165,27.209999084472656,-41.290000915527344,11.380000114440918,-38.09000015258789,-13.020000457763672,2.0299999713897705,-1.840000033378601,22.469999313354492,0.6299999952316284,59.459999084472656,40.41999816894531,-37.91999816894531,12.010000228881836,-8.180000305175781,-2.049999952316284,-2.7899999618530273,-50.459999084472656,23.889999389648438,-1.850000023841858,48.380001068115234,-14.59000015258789,1.0,-40.529998779296875,-49.20000076293945,42.47999954223633,27.15999984741211,-6.409999847412109,-8.630000114440918,50.04999923706055,2.549999952316284,40.90999984741211,-17.940000534057617,10.430000305175781,-30.25,-27.260000228881836,14.819999694824219,47.59000015258789,36.54999923706055,41.52000045776367,-18.290000915527344,20.950000762939453,52.38999938964844,-1.649999976158142,-45.529998779296875,-7.960000038146973,-24.600000381469727,58.5,0.8199999928474426,29.020000457763672,37.41999816894531,-6.389999866485596,5.389999866485596,25.149999618530273,31.65999984741211,-13.579999923706055,36.2599983215332,51.79999923706055,0.550000011920929,-17.049999237060547,-42.849998474121094,-59.4900016784668,59.81999969482422,-3.0799999237060547,-5.099999904632568,9.319999694824219,36.36000061035156,-28.760000228881836,-6.53000020980835,-31.829999923706055,10.619999885559082,54.529998779296875,33.36000061035156,-10.119999885559082,1.7400000095367432,-5.570000171661377,-25.90999984741211,-23.309999465942383,-33.959999084472656,23.229999542236328,-45.290000915527344,57.75,-46.95000076293945,25.1200008392334,-48.0,4.0,-52.540000915527344,42.90999984741211,-59.119998931884766,-22.0,36.90999984741211,27.079999923706055,28.639999389648438,-0.5799999833106995,-43.81999969482422,36.70000076293945,28.6299991607666,-24.329999923706055,13.890000343322754,-10.770000457763672,17.020000457763672,-20.260000228881836,50.150001525878906,-28.450000762939453,-6.5,51.349998474121094,-13.34000015258789,-9.9399995803833,4.360000133514404,28.860000610351562,3.450000047683716,-10.399999618530273,16.31999969482422,-29.329999923706055,-1.5700000524520874,-29.09000015258789,8.890000343322754,-28.280000686645508,-40.2400016784668,-11.300000190734863,-47.58000183105469,3.1600000858306885,-41.0099983215332,-53.04999923706055,-36.189998626708984,-7.039999961853027,-18.84000015258789,-11.039999961853027,58.630001068115234,14.34000015258789,10.920000076293945,15.619999885559082,10.079999923706055,9.869999885559082,-4.800000190734863,-11.970000267028809,11.25,17.0,16.56999969482422,28.739999771118164,-37.86000061035156,-16.5,52.40999984741211,27.389999389648438,-3.759999990463257,23.219999313354492,-60.790000915527344,-20.610000610351562,45.31999969482422,4.260000228881836,15.329999923706055,-26.510000228881836,-29.579999923706055,-38.86000061035156,-3.740000009536743,-1.5299999713897705,17.959999084472656,-45.47999954223633,-32.060001373291016,-42.79999923706055,-50.779998779296875,19.1299991607666,-23.31999969482422,3.4000000953674316,5.71999979019165,35.220001220703125,-17.93000030517578,-46.77000045776367,-11.979999542236328,10.029999732971191,-43.54999923706055,-44.599998474121094,26.989999771118164,36.27000045776367,-39.779998779296875,-19.809999465942383,41.09000015258789,-11.430000305175781,-24.170000076293945,-19.360000610351562,2.740000009536743,3.930000066757202,45.40999984741211,-10.300000190734863,39.790000915527344,12.15999984741211,-1.7100000381469727,14.760000228881836,11.449999809265137,-5.659999847412109,18.579999923706055,-33.09000015258789,0.6800000071525574,9.8100004196167,-32.290000915527344,34.790000915527344,-12.779999732971191,-25.8700008392334,23.270000457763672,-14.359999656677246,27.06999969482422,-31.600000381469727,34.880001068115234,-1.809999942779541,-23.049999237060547,12.40999984741211,-4.25,-22.850000381469727,43.83000183105469,-9.350000381469727,-9.319999694824219,13.859999656677246,-7.699999809265137,26.799999237060547,36.529998779296875,-2.7699999809265137,-10.020000457763672,6.380000114440918,34.349998474121094,-10.819999694824219,-18.770000457763672,28.65999984741211,-42.41999816894531,31.25,19.969999313354492,-41.59000015258789,24.729999542236328,5.619999885559082,-17.950000762939453,-23.920000076293945,-18.18000030517578,52.83000183105469,-14.369999885559082,-13.380000114440918,46.77000045776367,-35.09000015258789,15.720000267028809,-18.469999313354492,28.110000610351562,-8.380000114440918,-40.91999816894531,-42.470001220703125,35.16999816894531,24.3799991607666,-8.579999923706055,2.630000114440918,56.220001220703125,-18.75,35.09000015258789,8.149999618530273,-29.25,-9.779999732971191,-41.060001373291016,12.220000267028809,-41.2599983215332,-53.56999969482422,19.049999237060547,18.709999084472656,46.529998779296875,-55.34000015258789,30.530000686645508,-0.5299999713897705,17.020000457763672,8.739999771118164,15.869999885559082,-24.670000076293945,27.549999237060547,-60.189998626708984,-26.40999984741211,-8.510000228881836,-10.789999961853027,-43.7400016784668,-9.1899995803833,-33.33000183105469,-1.1299999952316284,46.310001373291016,-47.52000045776367,32.11000061035156,-30.709999084472656,-19.68000030517578,-51.27000045776367,53.040000915527344,32.0099983215332,41.40999984741211,16.549999237060547,-0.8899999856948853,2.259999990463257,22.389999389648438,33.279998779296875,10.880000114440918,34.95000076293945,55.61000061035156,-59.150001525878906,-28.850000381469727,17.520000457763672,35.68000030517578,-9.989999771118164,12.4399995803833,30.920000076293945,-6.369999885559082,16.25,-33.099998474121094,33.84000015258789,-37.90999984741211,9.279999732971191,-10.270000457763672,-9.550000190734863,45.84000015258789,35.06999969482422,-52.04999923706055,-8.930000305175781,35.70000076293945,0.8199999928474426,-33.61000061035156,21.540000915527344,-21.700000762939453,60.41999816894531,9.029999732971191,-43.65999984741211,-20.15999984741211,-19.670000076293945,10.270000457763672,5.090000152587891,11.380000114440918,-18.260000228881836,9.579999923706055,57.13999938964844,38.81999969482422,-23.459999084472656,-24.5,8.739999771118164,40.13999938964844,3.2899999618530273,-44.349998474121094,28.90999984741211,-10.729999542236328,0.800000011920929,-34.56999969482422,-1.8700000047683716,33.470001220703125,15.399999618530273,-20.190000534057617,-31.100000381469727,-7.460000038146973,7.460000038146973,-21.899999618530273,40.45000076293945,-13.020000457763672,3.200000047683716,36.15999984741211,38.72999954223633,-14.890000343322754,42.22999954223633,24.049999237060547,25.020000457763672,5.650000095367432,-27.3700008392334,-12.869999885559082,57.41999816894531,-12.770000457763672,18.020000457763672,-56.4900016784668,3.7300000190734863,25.979999542236328,53.40999984741211,-55.470001220703125,-14.739999771118164,24.3799991607666,14.550000190734863,-14.949999809265137,49.220001220703125,-49.720001220703125,53.77000045776367,24.75,18.760000228881836,-3.4200000762939453,-33.4900016784668,30.940000534057617,12.9399995803833,-17.809999465942383,12.609999656677246,11.279999732971191,-45.40999984741211,-15.699999809265137,12.710000038146973,-38.2599983215332,-8.649999618530273,32.68000030517578,33.15999984741211,11.09000015258789,-45.88999938964844,-22.850000381469727,-0.46000000834465027,-10.9399995803833,-33.25,-3.6600000858306885,-43.81999969482422,-35.720001220703125,-27.75,9.59000015258789,-16.56999969482422,25.920000076293945,-10.649999618530273,20.389999389648438,-42.650001525878906,44.88999938964844,-55.27000045776367,6.829999923706055,-30.43000030517578,22.280000686645508,-42.060001373291016,-25.780000686645508,-4.460000038146973,35.150001525878906,22.989999771118164,27.049999237060547,-0.05000000074505806,2.25,-28.8799991607666,50.95000076293945,17.059999465942383,-9.640000343322754,16.3700008392334,-25.510000228881836,-0.3100000023841858,39.02000045776367,-14.260000228881836,30.030000686645508,-19.1299991607666,38.709999084472656,-57.66999816894531,23.8700008392334,48.189998626708984,-41.66999816894531,56.459999084472656,35.06999969482422,-4.849999904632568,42.029998779296875,32.599998474121094,-46.81999969482422,-54.540000915527344,7.070000171661377,8.0,-20.90999984741211,8.869999885559082,22.5,-4.210000038146973,22.389999389648438,32.34000015258789,20.610000610351562,53.41999816894531,-13.039999961853027,-38.61000061035156,-32.84000015258789,20.25,49.400001525878906,38.84000015258789,-11.220000267028809,-32.689998626708984,30.479999542236328,-29.469999313354492,-5.820000171661377,-23.309999465942383,-7.440000057220459,38.15999984741211,22.40999984741211,-10.609999656677246,-13.739999771118164,7.329999923706055,-49.83000183105469,11.529999732971191,-58.93000030517578,39.099998474121094,-2.3299999237060547,-3.140000104904175,23.850000381469727,-14.869999885559082,-20.399999618530273,-38.2599983215332,-11.199999809265137,-25.649999618530273,16.469999313354492,15.029999732971191,43.119998931884766,-8.359999656677246,38.7400016784668,-8.0,-42.84000015258789,-12.09000015258789,-39.77000045776367,52.88999938964844,-40.2400016784668,-32.59000015258789,53.790000915527344,-16.739999771118164,-2.6700000762939453,-26.25,44.0099983215332,-25.610000610351562,-45.599998474121094,13.050000190734863,13.579999923706055,1.909999966621399,30.040000915527344,-22.719999313354492,20.350000381469727,-42.13999938964844,14.6899995803833,-5.78000020980835,-31.68000030517578,-46.72999954223633,-32.61000061035156,15.180000305175781,-38.33000183105469,-6.340000152587891,23.6299991607666,-54.189998626708984,34.7400016784668,-43.83000183105469,30.31999969482422,-24.799999237060547,-6.880000114440918,-43.59000015258789,21.579999923706055,-56.58000183105469,42.41999816894531,29.020000457763672,11.760000228881836,26.0,26.81999969482422,-44.619998931884766,37.02000045776367,39.86000061035156,-23.299999237060547,-32.439998626708984,-13.369999885559082,-6.519999980926514,25.81999969482422,25.15999984741211,-7.800000190734863,-37.97999954223633,-6.900000095367432,15.619999885559082,5.929999828338623,-35.380001068115234,-25.93000030517578,54.83000183105469,5.199999809265137,55.529998779296875,-29.56999969482422,-25.959999084472656,40.41999816894531,-4.090000152587891,-18.25,-19.5,-16.860000610351562,-0.27000001072883606,7.110000133514404,2.0199999809265137,-45.93000030517578,-18.549999237060547,-41.02000045776367,51.7599983215332,10.399999618530273,-23.229999542236328,53.060001373291016,27.15999984741211,-7.119999885559082,-12.6899995803833,-36.2599983215332,-19.530000686645508,36.15999984741211,-38.9900016784668,-57.029998779296875,20.790000915527344,58.209999084472656,-7.190000057220459,-25.110000610351562,-2.559999942779541,37.04999923706055,9.369999885559082,29.3700008392334,21.170000076293945,35.709999084472656,18.739999771118164,25.1200008392334,5.5,-38.529998779296875,43.34000015258789,35.810001373291016,36.43000030517578,31.6200008392334,-51.38999938964844,3.6500000953674316,-45.459999084472656,-7.789999961853027,-55.5,-44.83000183105469,-42.7400016784668,-53.209999084472656,-53.97999954223633,-21.170000076293945,31.670000076293945,51.61000061035156,9.890000343322754,25.68000030517578,34.209999084472656,28.920000076293945,-48.97999954223633,-43.939998626708984,-39.29999923706055,-12.760000228881836,-21.709999084472656,37.130001068115234,21.299999237060547,-14.09000015258789,-35.119998931884766,17.0,-29.729999542236328,17.059999465942383,43.849998474121094,36.84000015258789,15.210000038146973,25.079999923706055,2.8399999141693115,22.360000610351562,-0.8899999856948853,38.7400016784668,-16.65999984741211,0.03999999910593033,24.780000686645508,4.900000095367432,-53.970001220703125,25.049999237060547,27.479999542236328,-25.469999313354492,-33.7400016784668,-20.06999969482422,-53.41999816894531,20.760000228881836,55.689998626708984,-15.399999618530273,-45.439998626708984,-24.06999969482422,-12.300000190734863,53.79999923706055,-27.170000076293945,-31.06999969482422,-17.15999984741211,45.61000061035156,-12.609999656677246,-21.420000076293945,12.170000076293945,19.420000076293945,-16.520000457763672,7.869999885559082,-25.510000228881836,-3.7200000286102295,-17.209999084472656,-40.33000183105469,-0.05000000074505806,27.170000076293945,13.430000305175781,-14.65999984741211,-39.540000915527344,45.619998931884766,-15.270000457763672,-50.93000030517578,2.109999895095825,-16.719999313354492,-44.150001525878906,-26.459999084472656,37.61000061035156,5.929999828338623,-56.119998931884766,25.8700008392334,-0.10000000149011612,18.139999389648438,42.77000045776367,-53.52000045776367,42.060001373291016,19.219999313354492,32.29999923706055,-33.13999938964844,20.59000015258789,45.939998626708984,-22.690000534057617,-0.9100000262260437,-41.65999984741211,19.489999771118164,-11.289999961853027,32.630001068115234,45.650001525878906,32.470001220703125,39.810001373291016,-30.670000076293945,-3.609999895095825,-1.2999999523162842,-34.11000061035156,-8.899999618530273,44.09000015258789,21.559999465942383,52.779998779296875,10.15999984741211,26.780000686645508,-48.70000076293945,48.58000183105469,-31.059999465942383,12.720000267028809,-51.369998931884766,-50.7599983215332,-12.119999885559082,-43.5,17.18000030517578,-35.900001525878906,-29.15999984741211,12.029999732971191,43.06999969482422,12.729999542236328,-27.0,-28.729999542236328,-47.34000015258789,2.0199999809265137,41.470001220703125,-3.619999885559082,22.969999313354492,49.68000030517578,-6.179999828338623,-31.15999984741211,-21.889999389648438,-7.929999828338623,26.790000915527344,9.010000228881836,-20.010000228881836,18.540000915527344,-40.939998626708984,18.770000457763672,34.560001373291016,-19.639999389648438,49.83000183105469,33.45000076293945,-44.029998779296875,-8.470000267028809,-45.2400016784668,23.489999771118164,-11.789999961853027,6.559999942779541,6.340000152587891,-6.300000190734863,46.06999969482422,-36.40999984741211,-51.099998474121094,34.90999984741211,-16.610000610351562,-0.9300000071525574,-9.520000457763672,25.219999313354492,-40.40999984741211,-3.630000114440918,31.559999465942383,8.079999923706055,20.0,20.829999923706055,-6.639999866485596,-12.6899995803833,19.510000228881836,-40.61000061035156,-22.639999389648438,-8.800000190734863,-5.889999866485596,12.25,-46.380001068115234,-1.7599999904632568,5.03000020980835,-35.86000061035156,2.4000000953674316,48.5,-52.650001525878906,35.75,-30.149999618530273,42.040000915527344],"y":[-20.149999618530273,19.43000030517578,4.860000133514404,-3.990000009536743,-29.75,-18.260000228881836,-17.600000381469727,5.409999847412109,-1.25,-0.2800000011920929,-9.300000190734863,-13.470000267028809,35.0,13.279999732971191,5.860000133514404,4.570000171661377,-1.8700000047683716,-38.2599983215332,3.9700000286102295,19.43000030517578,23.31999969482422,27.06999969482422,-17.8700008392334,18.559999465942383,27.360000610351562,6.28000020980835,-17.549999237060547,-14.789999961853027,24.56999969482422,-5.349999904632568,-33.400001525878906,-33.52000045776367,6.079999923706055,13.609999656677246,-40.560001373291016,15.550000190734863,19.469999313354492,12.819999694824219,26.8799991607666,14.539999961853027,6.0,12.760000228881836,11.760000228881836,-3.2799999713897705,22.549999237060547,-0.23000000417232513,14.90999984741211,-28.920000076293945,1.399999976158142,-11.350000381469727,7.130000114440918,18.459999084472656,25.010000228881836,1.100000023841858,18.329999923706055,11.220000267028809,-1.2899999618530273,26.889999389648438,31.940000534057617,-18.780000686645508,-15.8100004196167,23.1200008392334,-10.399999618530273,-19.100000381469727,22.239999771118164,-10.84000015258789,-20.3700008392334,-21.3799991607666,-22.90999984741211,16.450000762939453,17.920000076293945,2.549999952316284,7.070000171661377,-18.059999465942383,-11.579999923706055,22.40999984741211,28.549999237060547,20.719999313354492,-11.380000114440918,-12.949999809265137,2.869999885559082,22.920000076293945,23.290000915527344,18.190000534057617,-1.8200000524520874,-0.5400000214576721,-10.119999885559082,10.350000381469727,15.180000305175781,6.820000171661377,12.270000457763672,-5.789999961853027,5.789999961853027,8.329999923706055,-25.559999465942383,-19.559999465942383,-2.490000009536743,24.579999923706055,-16.1299991607666,-2.4800000190734863,-5.449999809265137,-6.070000171661377,5.269999980926514,-33.630001068115234,16.790000915527344,-22.6299991607666,-0.3400000035762787,26.649999618530273,31.079999923706055,-29.200000762939453,-0.15000000596046448,30.520000457763672,5.199999809265137,26.889999389648438,-27.59000015258789,13.729999542236328,-39.619998931884766,-13.5600004196167,16.290000915527344,-34.81999969482422,18.06999969482422,-32.959999084472656,8.649999618530273,-20.200000762939453,7.420000076293945,8.140000343322754,4.800000190734863,-17.6200008392334,1.8200000524520874,-2.200000047683716,-25.559999465942383,0.019999999552965164,-8.989999771118164,-6.150000095367432,8.210000038146973,-20.829999923706055,1.6699999570846558,15.239999771118164,6.760000228881836,5.340000152587891,0.5799999833106995,-25.020000457763672,-32.880001068115234,2.299999952316284,-16.6200008392334,22.950000762939453,-41.220001220703125,-27.219999313354492,14.289999961853027,-10.0600004196167,-2.630000114440918,0.7799999713897705,-3.869999885559082,4.199999809265137,-9.670000076293945,8.1899995803833,2.1600000858306885,-7.550000190734863,8.609999656677246,-23.829999923706055,19.299999237060547,6.75,-0.8700000047683716,12.430000305175781,19.84000015258789,-12.4399995803833,5.519999980926514,-23.510000228881836,-23.979999542236328,-9.239999771118164,-7.03000020980835,-6.380000114440918,7.5,13.380000114440918,-14.979999542236328,-7.019999980926514,-9.239999771118164,-3.890000104904175,-5.809999942779541,22.3700008392334,23.1200008392334,12.170000076293945,-35.939998626708984,-0.6299999952316284,-19.0,7.300000190734863,-9.260000228881836,2.5999999046325684,17.219999313354492,12.119999885559082,-14.479999542236328,13.779999732971191,31.34000015258789,30.049999237060547,-19.469999313354492,-9.079999923706055,-27.110000610351562,8.5600004196167,13.229999542236328,-11.8100004196167,33.130001068115234,8.609999656677246,-5.28000020980835,-45.36000061035156,-8.359999656677246,26.3700008392334,-23.729999542236328,-10.75,5.46999979019165,-12.779999732971191,-41.58000183105469,31.299999237060547,22.8799991607666,-22.25,-1.6699999570846558,-17.040000915527344,8.100000381469727,-33.84000015258789,-28.549999237060547,24.139999389648438,-7.929999828338623,-6.150000095367432,2.0299999713897705,9.119999885559082,-21.489999771118164,-18.15999984741211,28.770000457763672,-19.700000762939453,19.149999618530273,-4.739999771118164,2.309999942779541,-12.300000190734863,-28.780000686645508,-3.5399999618530273,-3.0,25.90999984741211,0.33000001311302185,15.960000038146973,3.200000047683716,-24.65999984741211,-27.200000762939453,-8.829999923706055,19.309999465942383,-31.350000381469727,14.34000015258789,-24.690000534057617,-27.360000610351562,7.449999809265137,12.140000343322754,31.610000610351562,-21.399999618530273,5.820000171661377,14.90999984741211,-4.059999942779541,7.900000095367432,0.6899999976158142,5.389999866485596,26.899999618530273,6.300000190734863,-2.130000114440918,-13.520000457763672,4.599999904632568,-1.4299999475479126,-28.049999237060547,28.520000457763672,5.880000114440918,-28.190000534057617,-8.579999923706055,11.8100004196167,1.8700000047683716,-4.590000152587891,-19.610000610351562,-12.770000457763672,-3.119999885559082,13.510000228881836,-37.58000183105469,3.1600000858306885,2.190000057220459,-14.270000457763672,-24.450000762939453,-26.209999084472656,-40.619998931884766,1.4700000286102295,1.909999966621399,-21.170000076293945,-8.25,21.34000015258789,-20.979999542236328,13.130000114440918,16.440000534057617,16.219999313354492,11.399999618530273,1.75,-0.800000011920929,-10.460000038146973,10.930000305175781,16.229999542236328,26.600000381469727,0.6499999761581421,23.040000915527344,-22.239999771118164,10.010000228881836,8.920000076293945,8.069999694824219,-3.0799999237060547,6.0,-19.6299991607666,-17.219999313354492,19.18000030517578,10.630000114440918,-5.21999979019165,-5.440000057220459,24.690000534057617,1.7000000476837158,-7.199999809265137,-3.799999952316284,23.190000534057617,-24.059999465942383,-17.709999084472656,19.079999923706055,-16.15999984741211,-31.979999542236328,29.260000228881836,-1.100000023841858,3.380000114440918,-2.9600000381469727,-9.970000267028809,-18.68000030517578,10.960000038146973,-10.539999961853027,-20.420000076293945,-7.289999961853027,-10.800000190734863,21.399999618530273,12.020000457763672,-34.9900016784668,11.09000015258789,-17.65999984741211,5.409999847412109,32.599998474121094,-24.600000381469727,-35.060001373291016,-16.450000762939453,5.619999885559082,-10.84000015258789,12.180000305175781,18.940000534057617,-2.0999999046325684,34.369998931884766,-29.56999969482422,3.4100000858306885,-0.23000000417232513,10.739999771118164,9.4399995803833,1.559999942779541,5.210000038146973,-40.060001373291016,-7.340000152587891,3.9700000286102295,-11.170000076293945,16.239999771118164,11.460000038146973,-0.8199999928474426,-14.319999694824219,-2.880000114440918,-9.970000267028809,11.600000381469727,5.75,-44.790000915527344,-10.75,-29.8700008392334,7.940000057220459,14.470000267028809,14.640000343322754,12.039999961853027,6.75,2.7699999809265137,8.1899995803833,5.739999771118164,-9.899999618530273,7.610000133514404,-1.649999976158142,5.460000038146973,2.3299999237060547,-4.389999866485596,0.6100000143051147,-31.8799991607666,-25.079999923706055,-24.43000030517578,31.8700008392334,-22.43000030517578,11.279999732971191,3.1500000953674316,6.199999809265137,9.470000267028809,19.010000228881836,-16.790000915527344,0.5099999904632568,14.170000076293945,3.119999885559082,-1.2200000286102295,-11.710000038146973,6.480000019073486,25.260000228881836,19.639999389648438,-28.270000457763672,1.5700000524520874,0.5600000023841858,-27.09000015258789,5.480000019073486,17.350000381469727,-25.610000610351562,5.199999809265137,-13.9399995803833,12.399999618530273,-5.21999979019165,-33.18000030517578,-3.4200000762939453,-1.0700000524520874,-12.920000076293945,9.640000343322754,-11.720000267028809,-1.4199999570846558,-13.359999656677246,11.609999656677246,-12.65999984741211,-0.6499999761581421,15.739999771118164,-14.539999961853027,34.97999954223633,-1.850000023841858,14.960000038146973,12.239999771118164,5.489999771118164,-38.20000076293945,29.170000076293945,13.720000267028809,-19.670000076293945,-16.899999618530273,5.239999771118164,-0.07000000029802322,-15.569999694824219,-12.130000114440918,-19.479999542236328,-23.110000610351562,-5.380000114440918,4.440000057220459,-31.010000228881836,19.520000457763672,16.389999389648438,10.119999885559082,-15.760000228881836,19.06999969482422,3.6500000953674316,13.770000457763672,10.210000038146973,21.790000915527344,-6.619999885559082,4.050000190734863,-9.65999984741211,10.460000038146973,-17.799999237060547,29.110000610351562,-25.079999923706055,-27.579999923706055,6.480000019073486,16.149999618530273,19.989999771118164,13.010000228881836,-5.440000057220459,12.130000114440918,-2.940000057220459,-29.469999313354492,-1.9199999570846558,9.260000228881836,-43.47999954223633,-17.1299991607666,4.179999828338623,11.40999984741211,-40.59000015258789,-0.6600000262260437,11.260000228881836,11.020000457763672,-26.299999237060547,-12.609999656677246,-0.28999999165534973,-3.630000114440918,-8.180000305175781,-31.1299991607666,5.78000020980835,-28.440000534057617,4.210000038146973,9.109999656677246,2.7899999618530273,-42.130001068115234,-23.6200008392334,-10.279999732971191,23.959999084472656,-11.539999961853027,-16.59000015258789,-16.06999969482422,-4.730000019073486,14.949999809265137,-22.829999923706055,0.14000000059604645,-1.909999966621399,-14.170000076293945,30.209999084472656,-5.909999847412109,24.1200008392334,-6.590000152587891,-35.77000045776367,-21.940000534057617,-10.170000076293945,-0.8999999761581421,22.229999542236328,-19.709999084472656,-28.280000686645508,-15.670000076293945,2.4000000953674316,29.700000762939453,-2.950000047683716,10.630000114440918,-9.529999732971191,-13.619999885559082,-17.030000686645508,10.5600004196167,0.019999999552965164,14.050000190734863,12.729999542236328,14.920000076293945,-18.420000076293945,-16.860000610351562,-31.420000076293945,-4.730000019073486,-7.239999771118164,11.25,28.170000076293945,12.850000381469727,9.34000015258789,9.670000076293945,21.059999465942383,9.869999885559082,-10.510000228881836,-11.069999694824219,12.979999542236328,20.170000076293945,9.170000076293945,3.0899999141693115,29.030000686645508,6.659999847412109,7.710000038146973,-2.819999933242798,29.770000457763672,16.489999771118164,5.369999885559082,9.619999885559082,-1.6699999570846558,-19.0,-21.0,24.8700008392334,13.489999771118164,-6.309999942779541,-8.130000114440918,-14.489999771118164,14.130000114440918,-3.259999990463257,-5.619999885559082,14.65999984741211,10.109999656677246,26.18000030517578,23.920000076293945,-13.239999771118164,-29.040000915527344,22.84000015258789,-13.1899995803833,12.539999961853027,-5.849999904632568,10.819999694824219,16.34000015258789,-33.4900016784668,-23.40999984741211,2.319999933242798,24.09000015258789,-6.630000114440918,30.950000762939453,14.920000076293945,18.09000015258789,-10.84000015258789,-28.639999389648438,-12.15999984741211,-24.549999237060547,-13.479999542236328,14.09000015258789,5.980000019073486,-3.1700000762939453,-0.7799999713897705,-45.13999938964844,-11.65999984741211,26.420000076293945,-23.290000915527344,-15.800000190734863,-1.090000033378601,18.489999771118164,-3.3399999141693115,-16.15999984741211,-6.900000095367432,18.0,1.659999966621399,-3.380000114440918,1.7799999713897705,17.020000457763672,10.399999618530273,10.050000190734863,-34.150001525878906,-11.520000457763672,23.329999923706055,-3.869999885559082,-12.40999984741211,21.68000030517578,-11.470000267028809,29.780000686645508,2.3399999141693115,-3.0899999141693115,5.619999885559082,9.65999984741211,10.90999984741211,-8.520000457763672,21.950000762939453,-0.14000000059604645,17.149999618530273,11.529999732971191,12.020000457763672,-8.989999771118164,28.190000534057617,-0.18000000715255737,-25.06999969482422,-33.790000915527344,-26.15999984741211,2.119999885559082,-27.709999084472656,-40.5,18.40999984741211,-18.510000228881836,6.5,11.010000228881836,18.770000457763672,-1.2100000381469727,-6.75,8.210000038146973,-9.729999542236328,-24.280000686645508,18.469999313354492,-41.650001525878906,-23.639999389648438,9.170000076293945,-8.100000381469727,-8.140000343322754,-3.7699999809265137,-39.13999938964844,0.7799999713897705,-21.489999771118164,12.989999771118164,-10.119999885559082,-13.510000228881836,3.509999990463257,7.210000038146973,10.880000114440918,4.03000020980835,-10.930000305175781,4.380000114440918,7.179999828338623,7.420000076293945,0.3400000035762787,-8.670000076293945,-23.6200008392334,-13.800000190734863,9.40999984741211,1.899999976158142,13.010000228881836,-3.619999885559082,-0.6399999856948853,-7.210000038146973,-24.149999618530273,3.369999885559082,-6.150000095367432,29.809999465942383,-3.5299999713897705,-17.559999465942383,-7.880000114440918,3.069999933242798,22.190000534057617,-14.109999656677246,-3.380000114440918,6.03000020980835,7.989999771118164,24.079999923706055,8.710000038146973,-2.859999895095825,-27.700000762939453,10.529999732971191,-35.7400016784668,-23.469999313354492,2.9000000953674316,-6.210000038146973,-3.869999885559082,13.119999885559082,28.760000228881836,13.5600004196167,-0.8299999833106995,9.470000267028809,-19.190000534057617,-24.049999237060547,7.179999828338623,-13.8100004196167,4.059999942779541,16.950000762939453,-22.0,-37.56999969482422,-16.6299991607666,-33.349998474121094,24.639999389648438,17.030000686645508,-15.09000015258789,1.2400000095367432,2.259999990463257,15.989999771118164,4.679999828338623,13.520000457763672,12.90999984741211,9.109999656677246,-25.579999923706055,-29.520000457763672,7.320000171661377,-3.4800000190734863,10.880000114440918,7.920000076293945,-7.03000020980835,-16.40999984741211,-2.359999895095825,32.279998779296875,-23.34000015258789,-14.520000457763672,2.3299999237060547,-22.100000381469727,4.630000114440918,13.9399995803833,-8.109999656677246,5.889999866485596,12.930000305175781,-17.6200008392334,-9.0,7.400000095367432,7.28000020980835,25.56999969482422,-17.420000076293945,3.299999952316284,18.34000015258789,16.93000030517578,4.199999809265137,4.909999847412109,-21.25,-25.670000076293945,-2.880000114440918,-9.680000305175781,5.690000057220459,18.209999084472656,-24.43000030517578,-0.12999999523162842,-11.8100004196167,-41.9900016784668,-5.840000152587891,-26.889999389648438,11.399999618530273,-21.15999984741211,12.680000305175781,-0.5400000214576721,9.6899995803833,13.579999923706055,10.229999542236328,31.020000457763672,15.649999618530273,-0.7200000286102295,22.709999084472656,6.550000190734863,-16.510000228881836,-4.429999828338623,4.909999847412109,15.8100004196167,-4.409999847412109,7.210000038146973,2.3499999046325684,5.329999923706055,13.539999961853027,3.9700000286102295,-14.34000015258789,-3.890000104904175,22.170000076293945,1.059999942779541,18.84000015258789,9.460000038146973,31.170000076293945,16.229999542236328,11.720000267028809,-14.649999618530273,9.239999771118164,7.059999942779541,13.020000457763672,20.579999923706055,18.59000015258789,-0.6899999976158142,12.180000305175781,-14.789999961853027,28.780000686645508,-6.239999771118164,-2.140000104904175,5.860000133514404,0.27000001072883606,-15.489999771118164,-6.989999771118164,6.190000057220459,17.59000015258789,-6.679999828338623,-26.59000015258789,-44.33000183105469,-14.210000038146973,-24.899999618530273,12.069999694824219,-16.06999969482422,11.489999771118164,18.3700008392334,7.619999885559082,-27.190000534057617,-4.710000038146973,6.579999923706055,20.850000381469727,-12.069999694824219,-38.20000076293945,-2.490000009536743,1.840000033378601,3.8299999237060547,22.5,-37.470001220703125,7.539999961853027,4.480000019073486,-28.739999771118164,11.109999656677246,-17.260000228881836,2.809999942779541,7.570000171661377,17.860000610351562,-5.880000114440918,21.549999237060547,-2.9600000381469727,25.1299991607666,-11.210000038146973,-6.179999828338623,25.489999771118164,13.619999885559082,-2.240000009536743,-17.979999542236328,24.81999969482422,-3.6700000762939453,1.0,-3.109999895095825,-28.739999771118164,-8.670000076293945,-10.350000381469727,-12.880000114440918,4.389999866485596,7.429999828338623,-12.319999694824219,1.7300000190734863,7.960000038146973,-6.440000057220459,24.440000534057617,-29.049999237060547,6.019999980926514,0.9800000190734863,18.170000076293945,-19.049999237060547,-2.109999895095825,-19.670000076293945,-0.9700000286102295,-16.799999237060547,-23.729999542236328,-5.670000076293945,-38.20000076293945,9.050000190734863,11.359999656677246,15.050000190734863,23.25,-6.590000152587891,-4.340000152587891,15.199999809265137,16.940000534057617,-7.809999942779541,0.15000000596046448,-15.449999809265137,24.809999465942383,22.65999984741211,17.100000381469727,-15.390000343322754,-4.539999961853027,-12.850000381469727,-2.8499999046325684,-8.380000114440918,-3.6500000953674316,26.079999923706055,27.700000762939453,3.700000047683716,-25.549999237060547,1.5800000429153442,21.3799991607666,-25.079999923706055,-2.6600000858306885,24.18000030517578,-24.56999969482422,-6.650000095367432,28.760000228881836,-38.27000045776367,-0.5600000023841858,17.200000762939453,10.9399995803833,-26.3799991607666,15.600000381469727,6.949999809265137,11.4399995803833,11.199999809265137,-1.0099999904632568,-18.520000457763672,18.860000610351562,4.389999866485596,-5.860000133514404,8.609999656677246,-17.309999465942383,20.709999084472656,1.7999999523162842,4.300000190734863,11.0,26.649999618530273,19.770000457763672,-17.600000381469727,2.8499999046325684,-17.43000030517578,-33.06999969482422,11.319999694824219,-20.530000686645508,11.880000114440918,-44.189998626708984,24.239999771118164,-11.569999694824219,-8.6899995803833,13.8100004196167,-23.950000762939453,-14.289999961853027,5.769999980926514,-26.809999465942383,4.429999828338623,10.449999809265137,-5.059999942779541,19.969999313354492,0.15000000596046448,-32.97999954223633,-8.600000381469727,20.969999313354492,-7.449999809265137,-16.209999084472656,11.0600004196167,25.3799991607666,4.340000152587891,11.319999694824219,24.420000076293945,-2.990000009536743,13.9399995803833,-2.619999885559082,4.730000019073486,2.950000047683716,27.399999618530273,24.3799991607666,8.720000267028809,8.039999961853027,22.610000610351562,-1.4199999570846558,22.860000610351562,15.050000190734863,28.219999313354492,12.720000267028809,32.06999969482422,-33.33000183105469,-1.2300000190734863,-5.320000171661377,-14.430000305175781,6.25,7.199999809265137,12.680000305175781,8.390000343322754,11.859999656677246,-39.20000076293945,7.900000095367432,-16.09000015258789,25.65999984741211,16.940000534057617,-9.270000457763672,11.75,18.09000015258789,11.300000190734863,4.21999979019165,23.670000076293945,-23.889999389648438,-6.610000133514404,-2.069999933242798,-13.970000267028809,23.5,10.329999923706055,10.390000343322754,8.0,11.729999542236328,-8.789999961853027,-36.650001525878906,12.59000015258789,18.729999542236328,-7.21999979019165,9.720000267028809,-7.650000095367432,-2.4600000381469727,2.119999885559082,-9.720000267028809,-1.4700000286102295,-1.899999976158142,-3.4600000381469727,2.200000047683716,-33.33000183105469,7.389999866485596,-42.189998626708984,2.5899999141693115,-25.670000076293945,17.649999618530273,2.549999952316284,-6.639999866485596,5.980000019073486,-40.4900016784668,31.809999465942383,0.6700000166893005,28.100000381469727,-17.239999771118164,-17.079999923706055,-40.099998474121094,11.520000457763672,-41.22999954223633,31.979999542236328,-14.300000190734863,15.449999809265137,-30.079999923706055,-7.119999885559082,0.38999998569488525,-4.96999979019165,-24.770000457763672,19.469999313354492,-16.420000076293945,-19.40999984741211,-5.369999885559082,20.329999923706055,-42.11000061035156,25.059999465942383,16.540000915527344,2.9700000286102295,15.220000267028809,6.849999904632568,18.290000915527344,-10.34000015258789,-17.209999084472656,20.139999389648438,-4.409999847412109,12.609999656677246,0.07000000029802322,-18.170000076293945,-43.79999923706055,-14.40999984741211,4.050000190734863,20.959999084472656,22.459999084472656,-4.289999961853027,6.050000190734863,-13.140000343322754,-12.0,16.829999923706055,-17.170000076293945,7.619999885559082,30.399999618530273,-39.22999954223633,-25.84000015258789,22.100000381469727,4.300000190734863,-16.280000686645508,4.840000152587891,20.31999969482422,-8.539999961853027,-7.889999866485596,5.46999979019165,12.260000228881836,0.46000000834465027,-12.279999732971191,-5.889999866485596,-26.719999313354492,10.430000305175781,-5.210000038146973,10.520000457763672,18.530000686645508,13.890000343322754,34.29999923706055,8.779999732971191,16.829999923706055,7.199999809265137,7.300000190734863,21.989999771118164,5.440000057220459,-7.340000152587891,5.550000190734863,5.519999980926514,-27.290000915527344,-26.010000228881836,-14.199999809265137,-14.829999923706055,-7.28000020980835,1.5299999713897705,17.770000457763672,3.8399999141693115,2.8299999237060547,18.510000228881836,28.1200008392334,-16.170000076293945,11.699999809265137,-24.649999618530273,3.7200000286102295,9.40999984741211,16.6200008392334,-16.06999969482422,17.93000030517578,-24.969999313354492,-2.119999885559082,3.619999885559082,-15.050000190734863,8.850000381469727,-5.079999923706055,2.9700000286102295,32.9900016784668,-26.719999313354492,4.699999809265137,4.260000228881836,-14.640000343322754,8.649999618530273,-14.720000267028809,-20.770000457763672,-33.220001220703125,17.229999542236328,0.3100000023841858,15.420000076293945,0.4000000059604645,-22.8700008392334,-0.7300000190734863,13.279999732971191,2.180000066757202,9.6899995803833,-3.509999990463257,-6.96999979019165,-43.939998626708984,-11.359999656677246,-26.739999771118164,-2.700000047683716,2.8399999141693115,-24.09000015258789,-16.6299991607666,8.029999732971191,15.760000228881836,-4.199999809265137,-6.96999979019165,-18.139999389648438,0.30000001192092896,11.09000015258789,-13.25,30.030000686645508,-18.729999542236328,-11.329999923706055,7.650000095367432,27.610000610351562,-16.920000076293945,-22.219999313354492,6.239999771118164,20.010000228881836,-30.979999542236328,-32.79999923706055,-1.0800000429153442,11.069999694824219,10.329999923706055,-44.2599983215332,-15.25,5.380000114440918,-4.480000019073486,-5.360000133514404,-2.490000009536743,-8.859999656677246,-7.78000020980835,-37.04999923706055,-33.45000076293945,17.15999984741211,25.649999618530273,-0.8600000143051147,-29.040000915527344,-15.199999809265137,24.15999984741211,-17.989999771118164,-0.07999999821186066,16.299999237060547,22.360000610351562,-2.7200000286102295,13.029999732971191,1.2999999523162842,18.5,26.81999969482422,-11.8100004196167,-18.559999465942383,21.829999923706055,-6.46999979019165,-30.950000762939453,-16.059999465942383,-29.309999465942383,18.100000381469727,14.949999809265137,17.850000381469727,15.520000457763672,18.799999237060547,5.210000038146973,5.090000152587891,-1.5800000429153442,-6.070000171661377,-3.319999933242798,2.1500000953674316,32.9900016784668,0.9700000286102295,25.489999771118164,12.630000114440918,14.020000457763672,8.5,6.119999885559082,-32.91999816894531,30.969999313354492,-1.6100000143051147,-19.219999313354492,31.540000915527344,-25.459999084472656,-15.65999984741211,-0.33000001311302185,-4.579999923706055,-5.480000019073486,-38.869998931884766,22.149999618530273,-13.399999618530273,-3.869999885559082,9.020000457763672,-18.760000228881836,-17.540000915527344,22.219999313354492,-4.099999904632568,28.610000610351562,-1.3300000429153442,12.670000076293945,21.6200008392334,-15.449999809265137,21.040000915527344,-13.279999732971191,24.8799991607666,4.760000228881836,-1.5199999809265137,-19.6299991607666,-3.6600000858306885,-5.03000020980835,3.6700000762939453,3.2699999809265137,-5.960000038146973,31.829999923706055,-13.960000038146973,7.039999961853027,5.139999866485596,14.140000343322754,-26.170000076293945,-34.970001220703125,15.569999694824219,8.079999923706055,0.41999998688697815,15.300000190734863,15.210000038146973,-17.399999618530273,28.209999084472656,20.010000228881836,11.9399995803833,-19.799999237060547,8.670000076293945,15.90999984741211,29.31999969482422,-14.09000015258789,-4.710000038146973,-18.270000457763672,-6.579999923706055,12.84000015258789,-4.590000152587891,3.7899999618530273,-15.829999923706055,4.300000190734863,29.729999542236328,-9.710000038146973,22.450000762939453,-12.25,-21.110000610351562,-13.819999694824219,-38.459999084472656,4.630000114440918,6.980000019073486,13.720000267028809,10.479999542236328,8.640000343322754,27.260000228881836,-31.200000762939453,7.489999771118164,-34.650001525878906,-13.979999542236328,31.149999618530273,7.639999866485596,16.389999389648438,27.100000381469727,5.449999809265137,-39.38999938964844,-23.450000762939453,-6.480000019073486,-10.319999694824219,7.769999980926514,18.84000015258789,6.679999828338623,-26.979999542236328,25.030000686645508,-15.829999923706055,-3.1500000953674316,-11.329999923706055,11.239999771118164,21.329999923706055,19.079999923706055,7.920000076293945,-16.0,16.829999923706055,-20.209999084472656,-8.640000343322754,-7.059999942779541,13.630000114440918,-20.790000915527344,-8.359999656677246,-19.75,15.0600004196167,2.869999885559082,-5.409999847412109,12.1899995803833,-26.440000534057617,5.349999904632568,-40.86000061035156,-18.040000915527344,7.869999885559082,10.520000457763672,15.819999694824219,15.869999885559082,11.779999732971191,-23.68000030517578,18.760000228881836,10.859999656677246,-21.549999237060547,0.6100000143051147,9.970000267028809,-11.65999984741211,-0.3700000047683716,6.420000076293945,-3.759999990463257,7.929999828338623,24.329999923706055,12.800000190734863,-8.800000190734863,7.210000038146973,4.380000114440918,15.40999984741211,12.210000038146973,-6.659999847412109,8.510000228881836,6.650000095367432,-25.700000762939453,-35.380001068115234,-46.369998931884766,4.940000057220459,-27.639999389648438,17.510000228881836,9.199999809265137,-0.47999998927116394,-4.75,-13.779999732971191,-29.81999969482422,4.329999923706055,12.6899995803833,-1.3200000524520874,17.739999771118164,2.559999942779541,32.70000076293945,10.989999771118164,-14.170000076293945,-16.270000457763672,-35.970001220703125,-6.329999923706055,26.489999771118164,-9.119999885559082,11.949999809265137,21.90999984741211,-21.5,22.84000015258789,-19.559999465942383,12.470000267028809,-0.25999999046325684,20.399999618530273,18.270000457763672,15.210000038146973,19.15999984741211,-8.380000114440918,3.9800000190734863,-17.8700008392334,-21.760000228881836,3.4700000286102295,8.449999809265137,7.940000057220459,6.079999923706055,-0.8199999928474426,6.610000133514404,-13.0600004196167,-10.5,-3.009999990463257,4.690000057220459,-1.340000033378601,7.090000152587891,7.199999809265137,17.09000015258789,17.010000228881836,5.860000133514404,5.389999866485596,12.949999809265137,5.199999809265137,10.890000343322754,2.2699999809265137,15.710000038146973,-33.279998779296875,-27.309999465942383,-8.880000114440918,-22.049999237060547,-15.609999656677246,17.959999084472656,-8.34000015258789,25.790000915527344,18.040000915527344,1.4500000476837158,-30.010000228881836,4.71999979019165,-9.710000038146973,-16.0,12.90999984741211,-34.16999816894531,11.109999656677246,-11.920000076293945,15.779999732971191,-21.5,-37.939998626708984,6.480000019073486,-12.5600004196167,-10.949999809265137,12.270000457763672,-16.56999969482422,-15.130000114440918,0.47999998927116394,1.2400000095367432,-13.630000114440918,12.850000381469727,-7.820000171661377,-17.329999923706055,-10.510000228881836,-29.489999771118164,-27.940000534057617,5.46999979019165,17.09000015258789,-19.799999237060547,23.3799991607666,-10.850000381469727,-16.959999084472656,2.2899999618530273,-40.97999954223633,33.22999954223633,-23.329999923706055,-33.38999938964844,-35.18000030517578,18.690000534057617,-35.58000183105469,-7.760000228881836,-6.619999885559082,10.569999694824219,4.25,-16.450000762939453,14.779999732971191,-16.420000076293945,0.6899999976158142,9.140000343322754,-7.550000190734863,8.279999732971191,5.190000057220459,2.299999952316284,5.0,26.40999984741211,-28.8700008392334,-7.389999866485596,4.0,27.56999969482422,-20.979999542236328,17.59000015258789,24.09000015258789,-18.280000686645508,-33.4900016784668,10.779999732971191,17.469999313354492,24.360000610351562,-16.860000610351562,14.890000343322754,21.149999618530273,-11.5,-42.02000045776367,-2.799999952316284,-3.5199999809265137,16.360000610351562,-43.16999816894531,-22.6299991607666,2.680000066757202,-3.319999933242798,10.949999809265137,0.9900000095367432,7.130000114440918,15.899999618530273,15.640000343322754,-19.56999969482422,16.229999542236328,6.21999979019165,1.940000057220459,27.350000381469727,-27.899999618530273,-4.920000076293945,4.590000152587891,-19.420000076293945,-19.110000610351562,-0.17000000178813934,16.350000381469727,17.329999923706055,-4.179999828338623,8.859999656677246,2.4700000286102295,-41.099998474121094,21.06999969482422,15.329999923706055,5.690000057220459,14.5,-20.479999542236328,-17.899999618530273,15.9399995803833,-6.730000019073486,26.06999969482422,-2.7100000381469727,3.0,7.960000038146973,-22.559999465942383,12.510000228881836,5.96999979019165,-2.180000066757202,19.520000457763672,-26.0,13.75,-37.02000045776367,9.869999885559082,29.709999084472656,4.550000190734863,-24.09000015258789,28.649999618530273,3.75,-4.190000057220459,21.260000228881836,5.829999923706055,23.75,9.09000015258789,-11.8100004196167,-13.229999542236328,9.84000015258789,-28.5,7.269999980926514,7.260000228881836,15.829999923706055,18.860000610351562,11.09000015258789,-1.090000033378601,-2.9200000762939453,-3.0,-6.25,-9.899999618530273,-20.219999313354492,13.010000228881836,-0.07000000029802322,11.260000228881836,8.90999984741211,17.979999542236328,-42.529998779296875,-22.15999984741211,-17.549999237060547,-11.550000190734863,19.940000534057617,1.5,16.3799991607666,-7.489999771118164,23.719999313354492,-40.810001373291016,-27.540000915527344,19.969999313354492,-4.389999866485596,0.44999998807907104,-0.8899999856948853,3.0399999618530273,-4.559999942779541,-8.710000038146973,33.15999984741211,0.25999999046325684,13.850000381469727,-5.090000152587891,-3.0799999237060547,-13.359999656677246,4.059999942779541,20.139999389648438,-32.34000015258789,-19.239999771118164,-28.040000915527344,-6.46999979019165,0.3499999940395355,-2.490000009536743,-2.5899999141693115,-23.079999923706055,11.289999961853027,6.480000019073486,-18.739999771118164,-15.050000190734863,4.96999979019165,21.8700008392334,-25.1299991607666,-5.769999980926514,-34.470001220703125,-22.34000015258789,-15.59000015258789,11.270000457763672,15.130000114440918,8.050000190734863,-4.039999961853027,-15.029999732971191,16.690000534057617,13.880000114440918,-35.279998779296875,10.380000114440918,-9.859999656677246,-40.5,-5.960000038146973,-18.799999237060547,19.510000228881836,2.359999895095825,9.729999542236328,29.639999389648438,6.78000020980835,-28.43000030517578,-7.230000019073486,5.75,9.279999732971191,-0.6499999761581421,16.40999984741211,-8.670000076293945,12.720000267028809,-15.979999542236328,-11.569999694824219,-8.109999656677246,3.7300000190734863,11.300000190734863,7.690000057220459,-26.030000686645508,-18.809999465942383,-42.310001373291016,4.25,-11.899999618530273,-14.180000305175781,-25.059999465942383,-19.579999923706055,-4.539999961853027,-4.760000228881836,-16.799999237060547,-4.269999980926514,-13.789999961853027,21.030000686645508,21.3700008392334,15.970000267028809,24.479999542236328,7.190000057220459,8.539999961853027,-6.389999866485596,-7.409999847412109,-6.070000171661377,-35.09000015258789,12.109999656677246,-8.220000267028809,15.5600004196167,-2.619999885559082,14.6899995803833,-0.7400000095367432,2.9800000190734863,27.1200008392334,1.3899999856948853,16.299999237060547,6.0,-27.809999465942383,5.199999809265137,23.489999771118164,-0.3400000035762787,-29.5,12.029999732971191,22.700000762939453,4.849999904632568,23.440000534057617,26.959999084472656,-34.97999954223633,2.4700000286102295,12.550000190734863,-2.1500000953674316,7.139999866485596,17.610000610351562,11.170000076293945,-30.979999542236328,-0.8100000023841858,20.8700008392334,12.460000038146973,5.269999980926514,-9.960000038146973,-4.059999942779541,8.1899995803833,16.510000228881836,13.970000267028809,14.9399995803833,2.6700000762939453,0.7300000190734863,16.450000762939453,10.720000267028809,-4.21999979019165,5.210000038146973,-26.540000915527344,11.050000190734863,-29.31999969482422,12.3100004196167,22.399999618530273,-43.099998474121094,11.699999809265137,-10.539999961853027,9.739999771118164,4.53000020980835,4.699999809265137,-2.319999933242798,0.8399999737739563,4.230000019073486,8.59000015258789,14.029999732971191,15.470000267028809,10.5,8.579999923706055,28.1299991607666,-28.479999542236328,-25.170000076293945,-21.190000534057617,9.890000343322754,32.470001220703125,18.100000381469727,-26.520000457763672,-27.809999465942383,3.7300000190734863,23.860000610351562,0.05999999865889549,17.600000381469727,-26.950000762939453,-22.93000030517578,-2.299999952316284,28.290000915527344,-21.270000457763672,-5.980000019073486,-23.6299991607666,11.130000114440918,-10.770000457763672,-4.889999866485596,24.75,-10.869999885559082,-0.9800000190734863,-21.440000534057617,-5.28000020980835,34.27000045776367,-5.980000019073486,0.6899999976158142,9.289999961853027,4.679999828338623,20.510000228881836,26.09000015258789,-22.489999771118164,34.529998779296875,8.489999771118164,33.5099983215332,13.130000114440918,-29.68000030517578,20.190000534057617,-31.34000015258789,-12.930000305175781,17.18000030517578,12.760000228881836,-2.9700000286102295,21.399999618530273,-7.039999961853027,-10.149999618530273,8.920000076293945,-13.420000076293945,-13.989999771118164,-4.110000133514404,-34.099998474121094,-24.6200008392334,0.47999998927116394,-20.540000915527344,3.3299999237060547,3.619999885559082,27.829999923706055,-13.710000038146973,13.40999984741211,-22.899999618530273,-3.8299999237060547,27.209999084472656,-3.819999933242798,12.8100004196167,-20.8700008392334,13.489999771118164,-11.770000457763672,1.1299999952316284,-21.809999465942383,-27.43000030517578,18.049999237060547,26.3799991607666,-23.790000915527344,-12.079999923706055,10.350000381469727,-4.369999885559082,28.25,-11.380000114440918,-8.100000381469727,-32.31999969482422,17.889999389648438,-7.710000038146973,7.449999809265137,6.579999923706055,12.970000267028809,-25.739999771118164,7.760000228881836,1.8600000143051147,-21.239999771118164,-14.4399995803833,17.100000381469727,13.489999771118164,6.440000057220459,19.860000610351562,7.449999809265137,-16.969999313354492,17.190000534057617,-4.059999942779541,3.869999885559082,-15.869999885559082,-33.900001525878906,15.229999542236328,24.770000457763672,7.199999809265137,-43.0,0.5799999833106995,-32.7400016784668,25.940000534057617,26.770000457763672,4.210000038146973,2.619999885559082,-3.680000066757202,25.100000381469727,-25.809999465942383,-22.700000762939453,28.34000015258789,-13.899999618530273,-14.59000015258789,1.9199999570846558,12.239999771118164,1.5499999523162842,20.139999389648438,15.710000038146973,-21.860000610351562,24.799999237060547,12.65999984741211,16.190000534057617,-18.510000228881836,8.149999618530273,12.84000015258789,-12.630000114440918,36.540000915527344,4.019999980926514,5.0,-14.90999984741211,-4.139999866485596,3.130000114440918,-5.949999809265137,-9.890000343322754,7.980000019073486,-4.429999828338623,-20.299999237060547,-7.78000020980835,8.630000114440918,5.559999942779541,3.2100000381469727,-3.5399999618530273,23.729999542236328,-33.619998931884766,20.020000457763672,-22.559999465942383,20.950000762939453,8.670000076293945,-26.3700008392334,7.909999847412109,-9.789999961853027,5.760000228881836,0.9100000262260437,10.5,-29.940000534057617,-0.4000000059604645,-23.209999084472656,-0.20000000298023224,4.539999961853027,4.21999979019165,-22.459999084472656,-20.889999389648438,-16.739999771118164,-7.820000171661377,-12.020000457763672,2.0399999618530273,33.2599983215332,10.539999961853027,17.899999618530273,3.4800000190734863,-5.070000171661377,17.610000610351562,28.40999984741211,2.6500000953674316,12.640000343322754,-40.630001068115234,1.940000057220459,10.069999694824219,22.110000610351562,-37.43000030517578,19.3799991607666,16.170000076293945,-19.799999237060547,24.93000030517578,-17.700000762939453,-31.139999389648438,-15.670000076293945,-16.65999984741211,-30.030000686645508,4.210000038146973,-13.579999923706055,10.4399995803833,-21.65999984741211,-18.81999969482422,-28.889999389648438,-15.3100004196167,15.210000038146973,-33.4900016784668,1.4900000095367432,-21.1299991607666,-34.09000015258789,0.11999999731779099,-2.309999942779541,-16.459999084472656,-32.900001525878906,-2.0399999618530273,12.149999618530273,30.709999084472656,15.180000305175781,-11.380000114440918,8.890000343322754,7.989999771118164,7.789999961853027,-22.489999771118164,8.930000305175781,10.649999618530273,18.040000915527344,-20.399999618530273,-7.300000190734863,-5.929999828338623,-15.989999771118164,-27.989999771118164,-3.6700000762939453,15.329999923706055,9.449999809265137,-11.739999771118164,21.40999984741211,-12.0,-26.43000030517578,-2.740000009536743,-12.300000190734863,25.200000762939453,31.530000686645508,9.59000015258789,-6.849999904632568,-8.829999923706055,-9.260000228881836,1.0,7.619999885559082,3.630000114440918,5.139999866485596,-14.859999656677246,19.479999542236328,-2.799999952316284,-21.780000686645508,21.530000686645508,-7.610000133514404,17.850000381469727,7.710000038146973,11.180000305175781,-21.469999313354492,2.950000047683716,-5.960000038146973,28.93000030517578,12.779999732971191,4.239999771118164,-21.850000381469727,15.510000228881836,19.959999084472656,7.159999847412109,-22.18000030517578,13.069999694824219,0.9100000262260437,8.529999732971191,-24.290000915527344,-21.389999389648438,10.579999923706055,-5.099999904632568,-2.2899999618530273,-31.440000534057617,8.020000457763672,13.399999618530273,-17.010000228881836,-32.45000076293945,-15.739999771118164,-27.149999618530273,-40.93000030517578,-13.579999923706055,-27.889999389648438,-25.549999237060547,3.119999885559082,2.5999999046325684,4.010000228881836,-3.319999933242798,6.619999885559082,-35.40999984741211,-29.700000762939453,-29.790000915527344,-1.5,-36.79999923706055,-2.5,29.079999923706055,22.18000030517578,13.270000457763672,-30.65999984741211,-22.760000228881836,15.579999923706055,-11.880000114440918,31.360000610351562,4.429999828338623,-28.479999542236328,0.41999998688697815,-2.640000104904175,3.25,3.450000047683716,6.03000020980835,29.540000915527344,13.989999771118164,3.809999942779541,19.860000610351562,-25.65999984741211,4.409999847412109],"label":[4,3,3,5,0,0,3,2,5,4,4,5,2,3,3,4,5,4,5,2,3,4,6,1,3,6,4,6,0,0,6,6,3,2,6,2,2,1,0,2,1,4,3,2,1,5,3,6,5,5,5,3,1,0,1,3,3,2,0,0,6,0,0,1,4,4,6,0,4,3,0,1,2,0,4,3,3,3,0,5,5,0,2,3,1,3,5,2,3,5,2,1,0,4,6,0,5,2,0,4,5,5,2,6,2,0,5,2,2,6,4,1,5,4,4,2,4,0,5,6,1,6,3,6,1,3,0,6,3,4,0,5,5,2,2,4,1,3,3,0,3,4,4,3,0,1,6,4,2,0,2,6,4,1,4,5,5,4,3,4,0,2,5,1,1,0,5,6,0,5,4,2,2,0,4,0,4,6,5,2,2,2,6,1,0,0,3,5,3,2,0,1,0,0,0,5,6,1,3,0,2,1,4,6,5,2,6,4,2,6,4,6,1,6,3,0,3,6,6,2,0,5,5,1,6,6,2,4,4,2,4,4,0,1,6,2,2,1,1,6,6,5,2,4,3,0,6,3,1,4,6,2,2,1,2,0,2,2,0,4,5,3,5,6,1,5,6,4,1,5,1,0,4,1,3,6,5,3,2,6,6,6,6,1,0,1,2,6,4,3,0,5,5,5,4,3,2,1,5,2,6,2,3,2,5,5,6,5,1,3,1,5,1,3,5,3,2,0,0,2,0,6,1,6,3,5,6,0,3,4,0,5,0,6,3,6,1,6,5,4,1,4,6,3,1,3,3,5,4,0,5,0,2,2,5,1,6,1,2,0,1,1,3,0,6,5,2,3,4,2,6,4,5,3,2,5,2,1,4,3,5,4,5,3,1,0,6,6,1,4,4,1,5,3,3,3,1,3,2,1,1,4,3,1,3,6,5,5,0,3,2,6,3,0,4,1,4,0,0,4,3,4,0,5,1,2,2,4,1,5,1,2,0,2,6,0,2,5,0,3,5,4,5,6,0,3,4,0,2,2,2,4,2,6,3,3,0,4,2,5,3,0,0,6,6,2,2,1,2,0,2,1,6,4,5,6,3,5,3,6,0,3,1,0,0,2,4,5,6,1,6,5,4,5,6,6,6,1,5,6,0,0,1,3,6,2,5,4,4,2,5,6,6,0,1,0,0,6,1,0,2,5,3,0,0,6,3,5,3,1,3,6,6,6,5,4,4,2,2,3,6,2,3,4,0,2,1,3,1,1,0,2,4,0,4,2,3,5,5,2,1,1,4,4,4,2,4,3,2,3,0,2,0,4,1,4,2,5,3,1,6,6,4,3,6,4,1,2,4,6,5,4,4,2,5,4,6,6,0,2,4,0,3,0,6,4,6,4,5,1,4,3,2,1,4,4,1,4,4,1,0,4,4,1,5,3,3,0,2,3,2,1,3,4,2,6,4,6,0,1,4,4,2,6,2,3,2,5,2,2,6,0,2,6,0,1,4,1,4,6,1,6,3,5,3,5,1,5,4,1,5,1,6,3,4,4,4,3,2,2,5,5,4,6,5,5,6,4,4,4,5,3,0,2,0,3,3,1,4,4,6,6,6,1,3,5,2,1,2,0,3,0,6,2,1,1,3,0,6,0,6,1,3,4,5,3,0,5,2,1,1,0,6,3,0,2,3,4,0,4,4,6,5,4,0,0,6,0,3,2,6,4,2,5,2,0,3,2,2,1,2,6,4,0,0,1,2,6,0,5,6,4,6,3,6,2,5,5,2,3,4,6,3,0,0,4,5,1,4,1,5,1,0,2,3,4,1,1,5,2,5,4,3,3,6,0,3,6,1,3,5,2,0,1,5,0,1,1,0,6,1,1,1,0,4,0,0,2,4,3,4,3,6,1,1,2,0,0,5,5,3,3,6,3,2,6,3,3,5,2,1,0,3,5,1,6,4,3,3,0,6,1,5,3,3,0,0,4,4,4,4,1,6,3,4,2,6,2,5,1,0,6,5,3,0,1,5,6,4,3,0,0,6,2,0,2,0,0,4,2,2,2,5,4,5,5,0,5,1,6,1,2,1,0,0,0,4,0,5,2,4,1,1,4,1,2,0,3,1,4,5,1,5,3,0,0,3,5,1,1,1,0,0,5,6,6,5,0,0,4,3,0,4,3,6,0,3,6,2,4,1,3,2,6,5,2,4,4,1,4,2,1,3,4,3,6,5,1,3,3,3,2,0,5,1,2,4,5,4,6,0,1,4,1,3,0,3,1,4,2,4,3,3,4,4,3,3,5,1,4,0,5,0,1,4,3,3,2,0,6,3,2,2,5,5,2,4,4,4,2,5,5,6,0,4,5,6,1,5,4,3,6,6,5,2,0,6,6,3,0,6,1,2,4,1,5,6,6,1,5,4,5,1,4,2,2,5,1,5,0,4,4,3,4,1,3,0,4,0,5,2,2,1,5,4,4,5,6,2,6,6,6,3,6,4,1,3,0,0,3,1,5,0,1,4,3,6,2,2,4,2,5,2,4,1,0,3,0,3,4,4,6,6,3,5,5,1,5,2,3,2,6,2,6,5,6,0,6,3,6,4,2,0,2,4,5,2,0,3,3,6,3,0,0,4,1,3,3,1,1,0,2,5,3,5,1,4,4,3,2,5,0,0,1,1,4,1,6,4,3,2,4,6,0,1,3,0,6,5,2,4,6,4,2,0,0,0,2,6,0,3,0,4,6,6,0,1,4,6,0,2,5,3,2,1,0,2,3,2,0,1,6,1,5,6,6,0,1,2,2,1,3,2,5,5,1,2,5,2,4,1,5,3,2,0,6,2,5,4,0,3,5,5,6,6,6,2,2,3,4,6,1,3,5,4,0,1,2,6,2,1,2,5,1,4,3,5,1,5,1,0,3,5,1,1,0,6,1,5,1,2,2,1,2,1,6,0,3,1,4,3,4,0,0,1,5,0,6,4,0,5,2,6,6,6,6,1,4,1,4,1,4,6,4,4,0,2,3,3,4,0,6,6,6,5,1,2,3,4,2,5,5,0,3,2,1,3,4,3,6,0,4,2,4,3,0,3,2,1,3,6,5,6,6,3,4,1,3,2,6,1,3,4,1,3,2,4,2,5,3,2,2,0,1,5,2,2,1,3,1,0,6,5,2,6,2,1,5,3,5,0,5,4,5,0,5,4,3,4,0,6,5,3,6,5,1,6,1,6,3,5,0,3,2,2,4,3,0,6,1,2,0,5,4,2,5,6,5,4,5,2,5,2,2,2,3,1,4,1,1,0,6,6,1,0,0,1,4,2,3,3,6,1,4,4,6,4,0,4,2,5,4,1,0,5,2,5,5,1,2,0,4,0,6,5,6,6,5,2,0,3,5,6,3,6,4,6,6,6,3,6,0,0,4,1,1,2,0,5,1,1,5,3,4,2,1,6,6,5,0,4,2,1,6,6,3,5,2,0,3,1,1,4,6,4,3,6,6,0,5,3,1,2,1,0,4,2,2,3,2,6,3,5,1,6,0,2,2,5,3,1,6,1,3,2,3,0,6,2,4,1,5,5,1,0,3,5,1,3,0,1,5,2,0,5,6,1,2,5,2,2,2,3,5,1,5,6,5,3,4,3,1,1,4,0,0,1,0,3,5,2,1,1,6,4,0,4,1,5,3,0,1,6,6,3,0,5,4,1,4,0,3,2,4,1,5,4,2,4,6,4,6,1,3,1,2,0,1,3,0,5,1,1,4,5,6,0,0,2,2,2,1,4,3,2,6,3,1,0,0,0,0,0,5,2,3,4,0,5,3,1,2,5,2,4,1,6,0,5,3,0,0,0,5,0,4,6,0,4,5,6,1,0,2,3,1,1,5,2,0,4,0,6,2,4,2,4,2,0,4,2,5,3,5,2,5,1,5,6,6,3,1,4,2,6,5,3,0,1,1,2,6,3,2,3,2,1,5,0,3,2,4,1,1,3,3,5,5,3,4,6,1,1,4,1,0,1,3,2,5,5,1,3,3,4,2,1,4,6,6,6,3,2,2,6,4,5,1,5,3,6,6,1,2,6,5,6,2,1,0,3,6,3,4,5,2,5,3,2,5,3,2,6,6,1,4,4,4,1,4,0,2,4,5,1,0,0,5,4,4,5,6,1,5,0,5,1,2,6,2,3,5,3,0,3,4,1,5,0,0,6,2,0,6,1,1,6,2,4,4,6,2,6,3,4,3,6,5,3,6,6,4,2,4,4,1,0,2,5,3,0,6,3,6,2,4,5,6,3,4,5,1,3,2,6,6,3,0,0,0,3,1,1,1,5,3,3,3,0,5,4,5,1,5,5,5,5,5,5,0,3,0,3,1,1,5,5,5,2,6,3,0,0,5,3,5,0,3,1,4,0,1,0,4,4,2,4,6,6,5,3,1,4,2,2,5,1,3,2,5,5,4,3,2,2,6,3,2,6,1,0,4,2,6,4,2,0,2,0,0,4,5,3,6,5,6,6,5,2,1,6,5,3,0,1,0,5,3,1,4,2,1,3,6,4,5,1,6,0,3,3,1,2,4,6,5,0,3,2,3,4,4,5,3,2,1,5,5,2,5,0,2,4,0,3,6,6,5,0,0,4,4,0,3,2,5,6,0,1,1,4,1,5,3,0,6,3,3,5,6,5,0,6,4,4,6,1,5,5,1,2,6,6,0,5,6,1,1,1,0,6,6,3,5,6,4,6,0,5,4,4,5,2,3,5,3,6,3],"correct":[1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,1,1,1,1,0,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,0,0,1,1,1,1,1,1,1,0,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,0,1,1,1,1,1,0,0,1,0,1,1,1,0,0,0,1,1,1,0,1,1,0,0,1,1,1,0,1,1,1,0,0,1,0,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,0,1,0,0,1,1,1,1,1,1,1,1,1,0,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,1,1,0,1,1,1,0,1,1,1,1,1,1,0,1,0,1,1,1,1,0,0,1,0,1,1,1,1,1,1,0,1,0,1,1,1,0,1,1,0,1,0,0,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,1,0,0,0,1,1,1,0,1,1,1,1,1,0,1,1,1,0,1,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,0,0,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,0,1,1,1,1,1,1,1,0,1,0,0,1,1,1,0,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0,1,1,0,0,1,1,1,1,1,1,0,0,1,1,1,1,0,1,1,1,0,1,1,0,0,0,1,0,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,0,1,1,1,1,0,1,0,0,0,0,1,1,0,1,1,0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,0,0,1,1,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,0,0,0,1,1,1,0,1,0,1,1,1,0,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,0,1,0,0,0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,1,0,1,1,0,1,0,0,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,0,1,1,0,1,1,1,0,0,0,1,1,1,1,0,1,1,1,0,1,1,0,0,1,1,0,1,0,0,0,0,0,1,0,0,1,1,1,1,1,1,1,1,0,1,1,1,1,0,1,0,0,0,1,1,1,1,1,1,1,1,0,1,1,1,0,1,0,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,0,1,1,0,1,1,1,1,0,1,0,1,1,1,0,1,0,1,1,1,1,0,1,0,1,0,1,0,1,1,0,0,1,0,1,1,0,0,0,1,0,0,1,1,1,0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1,0,1,0,1,0,1,1,0,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,0,1,1,1,1,0,0,1,0,1,1,1,1,1,1,1,1,1,0,1,1,0,1,1,0,0,1,1,0,1,0,0,1,1,0,1,1,1,0,0,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,0,0,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1,0,0,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,0,0,1,1,0,1,1,1,1,1,1,1,0,1,1,1,0,0,1,1,1,1,0,1,1,0,1,0,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,0,1,0,0,1,0,1,1,0,1,0,0,1,1,1,1,1,1,0,0,1,0,1,1,1,0,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,0,1,1,0,0,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,0,0,1,0,0,0,1,1,1,1,0,1,1,1,1,0,1,0,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,1,1,0,0,0,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,0,1,0,1,1,0,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,0,0,1,1,1,0,0,1,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1,0,1,1,1,0,0,1,1,1,0,1,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,0,1,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,0,1,1,0,0,0,1,0,1,1,1,1,1,1,0,0,1,1,1,1,1,0,1,1,1,1,0,1,0,0,1,1,0,1,0,1,1,1,1,1,1,1,1,0,1,1,1,0,0,1,0,1,1,0,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,0,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,0,1,1,1,1,0,1,1,0,1,1,0,1,1,1,1,1,1,0,1,1,1,0,0,0,1,1,1,1,1,1,1,0,0,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,0,0,1,1,1,1,1,0,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,0,1,1,1,1,0,0,1,1,1,1,0,1,1,0,1,1,0,0,1,1,0,1,1,0,1,1,1,0,1,1,1,1,1,1,1,0,0,1,1,1,0,1,1,1,1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0,0,1,1,1,0,1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,1,0,1,0,1,1,1,0,1,1,1,1,0,1,0,1,0,1,1,1,1,1,1,0,0,1,0,1,1,0,1,1,0,1,1,1,1,1,1,1,1,0,1,1,1,1,0,0,1,1,1,1,1,0,1,0,1,1,0,0,1,0,0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1]},"policy":{"curve":[[1.0,0.7803],[1.0,0.7803],[1.0,0.7803],[1.0,0.7803],[1.0,0.7803],[1.0,0.7803],[1.0,0.7803],[1.0,0.7803],[1.0,0.7803],[1.0,0.7803],[1.0,0.7803],[0.9986,0.7814],[0.9957,0.7822],[0.99,0.7853],[0.9809,0.7901],[0.9704,0.7952],[0.9581,0.8005],[0.9361,0.806],[0.9113,0.8138],[0.888,0.8218],[0.8527,0.8312],[0.826,0.843],[0.795,0.8513],[0.7583,0.8598],[0.7283,0.8724],[0.7011,0.8817],[0.6721,0.8894],[0.6401,0.895],[0.6092,0.9014],[0.5701,0.9064],[0.54,0.9144],[0.5048,0.9245],[0.4704,0.9301],[0.4342,0.944],[0.3985,0.9486],[0.3603,0.955],[0.3093,0.9676],[0.256,0.9702],[0.1911,0.9751]],"threshold":0.8749999999999999,"coverage":0.3603431839847474,"accuracy":0.955026455026455},"window":{"cs.AI":["2026-09-30","2026-10-20"],"cs.CL":["2026-09-24","2026-10-20"],"cs.CV":["2026-10-02","2026-10-20"],"cs.IR":["2026-03-25","2026-10-20"],"cs.LG":["2026-10-05","2026-10-20"],"cs.RO":["2026-09-22","2026-10-20"],"stat.ML":["2026-03-03","2026-10-20"]},"cross":{"cs.AI":{"cs.AI":1.0,"cs.CL":0.1459,"cs.CV":0.0346,"cs.IR":0.019,"cs.LG":0.1514,"cs.RO":0.018,"stat.ML":0.008},"cs.CL":{"cs.AI":0.301,"cs.CL":1.0,"cs.CV":0.0255,"cs.IR":0.029,"cs.LG":0.1903,"cs.RO":0.001,"stat.ML":0.005},"cs.CV":{"cs.AI":0.1726,"cs.CL":0.029,"cs.CV":1.0,"cs.IR":0.005,"cs.LG":0.1061,"cs.RO":0.0465,"stat.ML":0.0005},"cs.IR":{"cs.AI":0.2815,"cs.CL":0.161,"cs.CV":0.0265,"cs.IR":1.0,"cs.LG":0.1385,"cs.RO":0.001,"stat.ML":0.0045},"cs.LG":{"cs.AI":0.2825,"cs.CL":0.099,"cs.CV":0.039,"cs.IR":0.0065,"cs.LG":1.0,"cs.RO":0.016,"stat.ML":0.084},"cs.RO":{"cs.AI":0.1537,"cs.CL":0.007,"cs.CV":0.1167,"cs.IR":0.0,"cs.LG":0.1067,"cs.RO":1.0,"stat.ML":0.0},"stat.ML":{"cs.AI":0.0921,"cs.CL":0.009,"cs.CV":0.0125,"cs.IR":0.002,"cs.LG":0.9815,"cs.RO":0.0005,"stat.ML":1.0}},"counts":{"cs.AI":1995,"cs.CL":1997,"cs.CV":1999,"cs.IR":2000,"cs.LG":2000,"cs.RO":1997,"stat.ML":1997}}</script>
+<script>
+(function () {
+  "use strict";
+  var D = JSON.parse(document.getElementById("cvd-data").textContent);
+  var NS = "http://www.w3.org/2000/svg";
+  var root = document.documentElement;
+  function tok(n) { return getComputedStyle(root).getPropertyValue(n).trim(); }
+
+  // ---------------------------------------------------------------- helpers
+  function el(tag, attrs, parent) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) {
+      if (attrs[k] == null) continue;
+      if (k === "text") e.textContent = attrs[k]; else e.setAttribute(k, attrs[k]);
+    }
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function lin(d0, d1, r0, r1) { return function (v) { return r0 + (v - d0) / ((d1 - d0) || 1) * (r1 - r0); }; }
+  function niceTicks(lo, hi, n) {
+    if (lo > hi) { var t0 = lo; lo = hi; hi = t0; }
+    var span = hi - lo || 1, raw = span / Math.max(1, n), mag = Math.pow(10, Math.floor(Math.log10(raw))), err = raw / mag;
+    var step = (err >= 7.5 ? 10 : err >= 3.5 ? 5 : err >= 1.5 ? 2 : 1) * mag, out = [];
+    for (var v = Math.ceil(lo / step - 1e-9) * step; v <= hi + step * 1e-9; v += step) out.push(+v.toFixed(10));
+    return out;
+  }
+  function pct(v, d) { return v == null ? "–" : (v * 100).toFixed(d == null ? 1 : d) + "%"; }
+  function num(v) { return Math.round(v).toLocaleString("en-US"); }
+  function short(v) { var a = Math.abs(v); return a >= 1e6 ? (v / 1e6).toFixed(1) + "M" : a >= 1e3 ? (v / 1e3).toFixed(a >= 1e4 ? 0 : 1) + "K" : (+v.toFixed(3)).toString(); }
+  function rgb(h) { h = h.replace("#", ""); if (h.length === 3) h = h.split("").map(function (c) { return c + c; }).join(""); return [0, 2, 4].map(function (i) { return parseInt(h.substr(i, 2), 16); }); }
+  function mix(a, b, t) { var A = rgb(a), B = rgb(b); return "rgb(" + A.map(function (v, i) { return Math.round(v + (B[i] - v) * t); }).join(",") + ")"; }
+  function lum(s) { var m = s.match(/\d+/g).map(Number).map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; }
+  function inkOn(fill) { return lum(fill) > 0.3 ? "#15191a" : "#ffffff"; }
+  function diverging(v) { var mid = tok("--cvd-div-mid"); v = Math.max(-1, Math.min(1, v)); return v >= 0 ? mix(mid, tok("--cvd-div-pos"), v) : mix(mid, tok("--cvd-div-neg"), -v); }
+  function sequential(t) { return mix(tok("--cvd-seq-lo"), tok("--cvd-seq-hi"), Math.max(0, Math.min(1, t))); }
+  function wrap(label, maxChars) {
+    if (label.length <= maxChars) return [label];
+    var words = label.split(" "), lines = [""];
+    words.forEach(function (w) {
+      var cur = lines[lines.length - 1];
+      if ((cur + " " + w).trim().length > maxChars && cur && lines.length < 2) lines.push(w);
+      else lines[lines.length - 1] = (cur + " " + w).trim();
+    });
+    return lines;
+  }
+  function roundedH(x0, x1, y, h, r) {
+    var len = Math.abs(x1 - x0); r = Math.min(r, len, h / 2);
+    if (x1 >= x0) return "M" + x0 + "," + y + "H" + (x1 - r) + "Q" + x1 + "," + y + " " + x1 + "," + (y + r) + "V" + (y + h - r) + "Q" + x1 + "," + (y + h) + " " + (x1 - r) + "," + (y + h) + "H" + x0 + "Z";
+    return "M" + x0 + "," + y + "H" + (x1 + r) + "Q" + x1 + "," + y + " " + x1 + "," + (y + r) + "V" + (y + h - r) + "Q" + x1 + "," + (y + h) + " " + (x1 + r) + "," + (y + h) + "H" + x0 + "Z";
+  }
+  function roundedV(x, w, yTop, yBase, r) {
+    var hgt = yBase - yTop; r = Math.min(r, w / 2, hgt);
+    if (hgt <= 0) return "";
+    return "M" + x + "," + yBase + "V" + (yTop + r) + "Q" + x + "," + yTop + " " + (x + r) + "," + yTop + "H" + (x + w - r) + "Q" + (x + w) + "," + yTop + " " + (x + w) + "," + (yTop + r) + "V" + yBase + "Z";
+  }
+
+  // ---------------------------------------------------------------- tooltip
+  var tip = document.querySelector(".cvd-tip");
+  function place(e) {
+    var pad = 14, r = tip.getBoundingClientRect(), x = e.clientX + pad, y = e.clientY + pad;
+    if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - pad;
+    if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - pad;
+    tip.style.left = Math.max(4, x) + "px"; tip.style.top = Math.max(4, y) + "px";
+  }
+  document.addEventListener("pointermove", function (e) {
+    var t = e.target && e.target.closest ? e.target.closest("[data-tip]") : null;
+    if (t) { tip.innerHTML = t.getAttribute("data-tip"); tip.hidden = false; place(e); } else tip.hidden = true;
+  });
+  document.addEventListener("scroll", function () { tip.hidden = true; }, true);
+
+  // ---------------------------------------------------------------- chart registry
+  var charts = [];
+  function render(c) {
+    var w = Math.floor(c.node.clientWidth);
+    if (!w) return;
+    c.w = w; c.node.innerHTML = "";
+    c.draw(c.node, w);
+  }
+  var ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(function (entries) {
+    entries.forEach(function (en) {
+      var c = charts.filter(function (x) { return x.node === en.target; })[0];
+      if (c && Math.floor(c.node.clientWidth) !== c.w) render(c);
+    });
+  }) : null;
+  function chart(id, draw) {
+    var node = document.getElementById(id);
+    if (!node) return;
+    var c = { node: node, draw: draw, w: 0 };
+    charts.push(c); render(c);
+    if (ro) ro.observe(node);
+  }
+  function redrawAll() { charts.forEach(render); }
+  try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawAll); } catch (e) { }
+  new MutationObserver(redrawAll).observe(root, { attributes: true, attributeFilter: ["data-theme", "class"] });
+
+  // ---------------------------------------------------------------- chart forms
+  function svgFrame(node, w, h, label) { return el("svg", { width: w, height: h, viewBox: "0 0 " + w + " " + h, role: "img", "aria-label": label || null }, node); }
+
+  function axes(g, f, xs, ys, cfg) {
+    ys.ticks.forEach(function (t) {
+      var y = ys.s(t);
+      el("line", { x1: f.x0, x2: f.x1, y1: y, y2: y, style: "stroke:var(--cvd-grid);stroke-width:1" }, g);
+      el("text", { x: f.x0 - 6, y: y + 3.5, "text-anchor": "end", "class": "ax", text: ys.fmt(t) }, g);
+    });
+    el("line", { x1: f.x0, x2: f.x1, y1: f.y1, y2: f.y1, style: "stroke:var(--cvd-axis);stroke-width:1" }, g);
+    xs.ticks.forEach(function (t) { el("text", { x: xs.s(t), y: f.y1 + 15, "text-anchor": "middle", "class": "ax", text: xs.fmt(t) }, g); });
+    if (cfg.xLabel) el("text", { x: (f.x0 + f.x1) / 2, y: f.y1 + 31, "text-anchor": "middle", text: cfg.xLabel }, g);
+    if (cfg.yLabel) el("text", { x: f.x0 - 6, y: f.y0 - 9, text: cfg.yLabel }, g);
+  }
+
+  function lineChart(node, w, cfg) {
+    var h = cfg.height || Math.round(Math.max(190, Math.min(290, w * 0.55)));
+    var m = { l: cfg.ml || 44, r: cfg.mr || 14, t: cfg.yLabel ? 24 : 10, b: cfg.xLabel ? 42 : 24 };
+    var g = svgFrame(node, w, h, cfg.aria);
+    var f = { x0: m.l, x1: w - m.r, y0: m.t, y1: h - m.b };
+    var xs = { s: lin(cfg.x[0], cfg.x[1], f.x0, f.x1), ticks: cfg.xTicks || niceTicks(cfg.x[0], cfg.x[1], Math.min(10, Math.max(2, Math.floor((f.x1 - f.x0) / 75)))), fmt: cfg.xFmt || short };
+    var ys = { s: lin(cfg.y[0], cfg.y[1], f.y1, f.y0), ticks: cfg.yTicks || niceTicks(cfg.y[0], cfg.y[1], h > 220 ? 5 : 4), fmt: cfg.yFmt || short };
+    (cfg.bands || []).forEach(function (b) {
+      var xa = xs.s(b[0]), xb = xs.s(b[1]);
+      el("rect", { x: Math.min(xa, xb), y: f.y0, width: Math.abs(xb - xa), height: f.y1 - f.y0, style: "fill:var(--cvd-accent-wash)" }, g);
+      if (b[2]) el("text", { x: Math.min(xa, xb) + 6, y: f.y0 + 13, "class": "lbl", text: b[2] }, g);
+    });
+    axes(g, f, xs, ys, cfg);
+    (cfg.refs || []).forEach(function (r) {
+      el("line", { x1: xs.s(r[0]), y1: ys.s(r[1]), x2: xs.s(r[2]), y2: ys.s(r[3]), style: "stroke:var(--cvd-axis);stroke-width:1.5;stroke-dasharray:4 4" }, g);
+    });
+    (cfg.vlines || []).forEach(function (v) {
+      var x = xs.s(v[0]);
+      el("line", { x1: x, x2: x, y1: f.y0, y2: f.y1, style: "stroke:var(--cvd-ink-2);stroke-width:1;stroke-dasharray:3 3" }, g);
+      if (v[1]) el("text", { x: x + (v[2] === "left" ? -5 : 5), y: f.y0 + 12, "text-anchor": v[2] === "left" ? "end" : "start", "class": "lbl", text: v[1] }, g);
+    });
+    var endLabels = [];
+    cfg.series.forEach(function (s) {
+      var pts = s.pts.filter(function (p) { return p[1] != null && isFinite(p[1]); });
+      if (s.label && pts.length) endLabels.push({ x: xs.s(pts[pts.length - 1][0]) + 9, y: ys.s(pts[pts.length - 1][1]) + 4, t: s.label, bold: s.bold });
+      if (!pts.length) return;
+      var d = pts.map(function (p, i) { return (i ? "L" : "M") + xs.s(p[0]).toFixed(1) + "," + ys.s(p[1]).toFixed(1); }).join("");
+      if (s.area) el("path", { d: d + "L" + xs.s(pts[pts.length - 1][0]).toFixed(1) + "," + f.y1 + "L" + xs.s(pts[0][0]).toFixed(1) + "," + f.y1 + "Z", style: "fill:" + s.color + ";opacity:0.1" }, g);
+      el("path", { d: d, style: "fill:none;stroke:" + s.color + ";stroke-width:" + (s.width || 2) + ";stroke-linejoin:round;stroke-linecap:round;" + (s.dash ? "stroke-dasharray:5 4;" : "") }, g);
+      if (s.dots) pts.forEach(function (p) { el("circle", { cx: xs.s(p[0]), cy: ys.s(p[1]), r: 4, style: "fill:" + s.color + ";stroke:var(--cvd-surface);stroke-width:2" }, g); });
+    });
+    endLabels.sort(function (a, b) { return a.y - b.y; });
+    for (var li = 1; li < endLabels.length; li++) if (endLabels[li].y - endLabels[li - 1].y < 15) endLabels[li].y = endLabels[li - 1].y + 15;
+    endLabels.forEach(function (lb) { el("text", { x: lb.x, y: lb.y, "class": "lbl halo", style: lb.bold ? "font-weight:600;fill:var(--cvd-ink)" : null, text: lb.t }, g); });
+    (cfg.marks || []).forEach(function (mk) {
+      var cx = xs.s(mk[0]), cy = ys.s(mk[1]), sideL = mk[3] ? mk[3] === "left" : cx > (f.x0 + f.x1) / 2;
+      el("circle", { cx: cx, cy: cy, r: 5.5, style: "fill:var(--cvd-ink);stroke:var(--cvd-surface);stroke-width:2" }, g);
+      if (mk[2]) el("text", { x: cx + (sideL ? -9 : 9), y: cy + (mk[4] || -9), "text-anchor": sideL ? "end" : "start", "class": "val halo", text: mk[2] }, g);
+    });
+    if (cfg.tip) {
+      var hx = cfg.hoverX || cfg.series[0].pts.map(function (p) { return p[0]; });
+      var px = hx.map(xs.s);
+      hx.forEach(function (xv, i) {
+        var a = i ? (px[i - 1] + px[i]) / 2 : Math.min(px[i], f.x0), b = i < hx.length - 1 ? (px[i] + px[i + 1]) / 2 : Math.max(px[i], f.x1);
+        var lo = Math.min(a, b), hi = Math.max(a, b);
+        el("rect", { x: lo, y: f.y0, width: Math.max(1, hi - lo), height: f.y1 - f.y0, "class": "hit", "data-tip": cfg.tip(i, xv) }, g);
+      });
+    }
+  }
+
+  function barH(node, w, cfg) {
+    var rowH = cfg.rowH || 32, bh = Math.min(18, rowH - 12);
+    var maxChars = Math.max(12, Math.floor((cfg.labelW || Math.min(230, w * 0.42)) / 6.6));
+    var lw = cfg.labelW || Math.min(230, Math.round(w * 0.42));
+    var vw = cfg.valW || 58;
+    var h = cfg.items.length * rowH + (cfg.dot ? 22 : 4);
+    var g = svgFrame(node, w, h, cfg.aria);
+    var lo = cfg.domain[0], hi = cfg.domain[1];
+    var neg = lo < 0;
+    var sx = lin(lo, hi, lw + (neg ? vw : 0), w - vw);
+    var base = sx(cfg.base != null ? cfg.base : Math.max(lo, 0));
+    if (!cfg.dot) el("line", { x1: base, x2: base, y1: 0, y2: h, style: "stroke:var(--cvd-axis);stroke-width:1" }, g);
+    else {
+      niceTicks(lo, hi, 4).forEach(function (t) { if (t < lo - 1e-9 || t > hi + 1e-9) return; el("line", { x1: sx(t), x2: sx(t), y1: 0, y2: h - 18, style: "stroke:var(--cvd-grid);stroke-width:1" }, g); el("text", { x: sx(t), y: h - 4, "text-anchor": "middle", "class": "ax", text: cfg.fmt ? cfg.fmt(t) : t }, g); });
+    }
+    cfg.items.forEach(function (it, i) {
+      var yc = i * rowH + rowH / 2, x1 = sx(it.value);
+      var lines = wrap(it.label, maxChars);
+      var t = el("text", { x: lw - 10, y: yc + 4 - (lines.length - 1) * 7, "text-anchor": "end", "class": "lbl", style: it.bold ? "font-weight:600;fill:var(--cvd-ink)" : null }, g);
+      lines.forEach(function (ln, k) { el("tspan", { x: lw - 10, dy: k ? 14 : 0, text: ln }, t); });
+      if (cfg.dot) {
+        el("line", { x1: sx(lo), x2: sx(hi), y1: yc, y2: yc, style: "stroke:var(--cvd-grid);stroke-width:1" }, g);
+        el("circle", { cx: x1, cy: yc, r: 5.5, style: "fill:" + (it.color || "var(--cvd-accent)") + ";stroke:var(--cvd-bg);stroke-width:2" }, g);
+      } else el("path", { d: roundedH(base, x1, yc - bh / 2, bh, 4), style: "fill:" + (it.color || "var(--cvd-accent)") }, g);
+      var right = x1 >= base;
+      el("text", { x: x1 + (right ? (cfg.dot ? 10 : 6) : -6), y: yc + 4, "text-anchor": right ? "start" : "end", "class": "val", text: it.fmt || (cfg.fmt ? cfg.fmt(it.value) : it.value) }, g);
+      el("rect", { x: 0, y: i * rowH, width: w, height: rowH, "class": "hit", "data-tip": it.tip || ("<b>" + it.label + "</b><br>" + (cfg.fmt ? cfg.fmt(it.value) : it.value)) }, g);
+    });
+  }
+
+  function histogram(node, w, cfg) {
+    var h = cfg.height || 150, m = { l: 38, r: 16, t: 8, b: 24 };
+    var g = svgFrame(node, w, h, cfg.aria);
+    var f = { x0: m.l, x1: w - m.r, y0: m.t, y1: h - m.b };
+    var e = cfg.edges, c = cfg.counts, maxC = Math.max.apply(null, c) || 1;
+    var xs = { s: lin(e[0], e[e.length - 1], f.x0, f.x1), ticks: niceTicks(e[0], e[e.length - 1], 3), fmt: cfg.xFmt || short };
+    xs.ticks = xs.ticks.filter(function (t) { return t >= e[0] - 1e-9 && t <= e[e.length - 1] + 1e-9; });
+    var ys = { s: lin(0, maxC * 1.05, f.y1, f.y0), ticks: niceTicks(0, maxC, 3), fmt: short };
+    axes(g, f, xs, ys, {});
+    c.forEach(function (v, i) {
+      var xa = xs.s(e[i]), xb = xs.s(e[i + 1]), bw = Math.max(0.5, xb - xa - 1);
+      var d = roundedV(xa + 0.5, bw, ys.s(v), f.y1, Math.min(3, bw / 2));
+      if (d) el("path", { d: d, style: "fill:" + (cfg.color || "var(--cvd-accent)") }, g);
+      el("rect", { x: xa, y: f.y0, width: Math.max(1, xb - xa), height: f.y1 - f.y0, "class": "hit", "data-tip": cfg.tip(i) }, g);
+    });
+  }
+
+  function heatmap(node, w, cfg) {
+    var lw = cfg.labelW || 92, top = cfg.top == null ? 18 : cfg.top, n = cfg.cols.length;
+    var cell = Math.max(14, Math.min(cfg.maxCell || 52, Math.floor((w - lw - (cfg.rotate ? 16 : 4)) / n)));
+    var cellH = cfg.cellH ? Math.min(cfg.cellH, cell) : cell;
+    var h = top + cfg.rows.length * cellH + (cfg.bottom || 4);
+    var g = svgFrame(node, w, h, cfg.aria);
+    cfg.cols.forEach(function (c, j) {
+      var x = lw + j * cell + cell / 2;
+      if (cfg.rotate) el("text", { x: 0, y: 0, "text-anchor": "start", "class": "lbl", transform: "translate(" + (x - 3) + "," + (top - 6) + ") rotate(-45)", text: c }, g);
+      else el("text", { x: x, y: top - 6, "text-anchor": "middle", "class": "lbl", text: c }, g);
+    });
+    cfg.rows.forEach(function (r, i) {
+      el("text", { x: lw - 8, y: top + i * cellH + cellH / 2 + 4, "text-anchor": "end", "class": "lbl", text: r }, g);
+      cfg.rows.length && cfg.cols.forEach(function (c, j) {
+        var v = cfg.values[i][j];
+        if (v == null) return;
+        var fill = cfg.color(v, i, j);
+        el("rect", { x: lw + j * cell + 1, y: top + i * cellH + 1, width: cell - 2, height: cellH - 2, rx: 3, style: "fill:" + fill }, g);
+        if (Math.min(cell, cellH) >= (cfg.minTextCell || 30)) el("text", { x: lw + j * cell + cell / 2, y: top + i * cellH + cellH / 2 + 4, "text-anchor": "middle", style: "fill:" + inkOn(fill) + ";font-size:" + (cell > 44 ? 12.5 : 10.5) + "px;font-variant-numeric:tabular-nums", text: cfg.fmt(v, i, j) }, g);
+        el("rect", { x: lw + j * cell, y: top + i * cellH, width: cell, height: cellH, "class": "hit", "data-tip": cfg.tip(v, i, j) }, g);
+      });
+    });
+    if (cfg.xTitle) el("text", { x: lw + n * cell / 2, y: h - 4, "text-anchor": "middle", text: cfg.xTitle }, g);
+  }
+
+  function scatterChart(node, w, cfg) {
+    var h = cfg.height || Math.round(Math.max(260, Math.min(420, w * 0.62)));
+    var m = { l: cfg.ml || 48, r: 16, t: cfg.yLabel ? 24 : 10, b: cfg.xLabel ? 42 : 24 };
+    var g = svgFrame(node, w, h, cfg.aria);
+    var f = { x0: m.l, x1: w - m.r, y0: m.t, y1: h - m.b };
+    var xs = { s: lin(cfg.x[0], cfg.x[1], f.x0, f.x1), ticks: cfg.noAxes ? [] : niceTicks(cfg.x[0], cfg.x[1], 5), fmt: cfg.xFmt || short };
+    var ys = { s: lin(cfg.y[0], cfg.y[1], f.y1, f.y0), ticks: cfg.noAxes ? [] : niceTicks(cfg.y[0], cfg.y[1], 5), fmt: cfg.yFmt || short };
+    if (!cfg.noAxes) axes(g, f, xs, ys, cfg);
+    cfg.points.forEach(function (p) {
+      el("circle", { cx: xs.s(p.x), cy: ys.s(p.y), r: p.r || 3, "class": cfg.hitPoints ? "hit-pt" : null,
+                     style: "fill:" + p.color + ";fill-opacity:" + (p.alpha || 0.75) + (p.ring ? ";stroke:var(--cvd-bg);stroke-width:2" : ""),
+                     "data-tip": p.tip || null }, g);
+    });
+    var placed = [];
+    (cfg.labels || []).forEach(function (lb) {
+      var half = lb.t.length * 3.2, ly = ys.s(lb.y) + (lb.dy || 0);
+      var lx = Math.max(half + 2, Math.min(w - half - 2, xs.s(lb.x) + (lb.dx || 0)));   // keep labels inside the chart
+      if (cfg.avoid && placed.some(function (q) { return Math.abs(q[0] - lx) < half + q[2] && Math.abs(q[1] - ly) < 13; })) {
+        ly = ys.s(lb.y) - (lb.dy || 0) + 4;            // flip the label below its point
+      }
+      placed.push([lx, ly, half]);
+      el("text", { x: lx, y: ly, "text-anchor": lb.anchor || "middle", "class": "lbl halo",
+                   style: lb.bold ? "font-weight:600;fill:var(--cvd-ink)" : (lb.small ? "font-size:10px" : null), text: lb.t }, g);
+    });
+  }
+
+  // ---------------------------------------------------------------- NLP report
+  var ACC = "var(--cvd-accent)", MUTED = "var(--cvd-neutral-mark)";
+  var CL = D.classes, CC = {};
+  CL.forEach(function (c, i) { CC[c] = "var(--cvd-c" + (i + 1) + ")"; });
+  var FAM = { baseline: MUTED, classical: "var(--cvd-c1)", scratch: "var(--cvd-c2)", "pretrained-frozen": "var(--cvd-c3)", "fine-tuned": "var(--cvd-c4)", ensemble: "var(--cvd-c5)" };
+  var FAMN = { baseline: "baseline", classical: "classical NLP", scratch: "neural, from scratch", "pretrained-frozen": "pretrained, frozen", "fine-tuned": "pretrained, fine-tuned", ensemble: "ensemble" };
+  var SEL = D.selection.filter(function (r) { return r.family !== "baseline"; });
+  function sn(name) { return D.short[name] || name; }
+  function secs(v) { return v >= 60 ? (v / 60).toFixed(1) + " min" : v >= 1 ? Math.round(v) + " s" : v.toFixed(2) + " s"; }
+  function modelTip(r) {
+    return "<b>" + r.model + "</b><br>" + FAMN[r.family] + "<br>val macro-F1 " + r.val_macro_f1.toFixed(3) + " · accuracy " + pct(r.val_acc) +
+      "<br>training " + secs(r.train_s) + " · " + (r.params_m >= 1 ? r.params_m.toFixed(1) + " M" : num(r.params_m * 1e6)) + " parameters";
+  }
+  function rerender(id) { charts.forEach(function (c) { if (c.node.id === id) render(c); }); }
+
+  // 01 publication window per category
+  chart("ch-window", function (n, w) {
+    var t = function (s) { return Date.parse(s + "T00:00:00Z"); };
+    var lo = Math.min.apply(null, CL.map(function (c) { return t(D.window[c][0]); })), hi = Math.max.apply(null, CL.map(function (c) { return t(D.window[c][1]); }));
+    var lw = 66, vw = 74, rowH = 30, h = CL.length * rowH + 24;
+    var g = svgFrame(n, w, h, "Publication window per category");
+    var sx = lin(lo, hi, lw, w - vw);
+    var d = new Date(lo), months = [];
+    d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+    while (d.getTime() <= hi) { months.push(d.getTime()); d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)); }
+    var every = Math.max(1, Math.ceil(months.length / Math.max(2, Math.floor((w - lw - vw) / 56))));
+    months.forEach(function (mt, k) {
+      var x = sx(mt);
+      el("line", { x1: x, x2: x, y1: 0, y2: h - 20, style: "stroke:var(--cvd-grid);stroke-width:1" }, g);
+      if (k % every === 0) el("text", { x: x, y: h - 5, "text-anchor": "middle", "class": "ax", text: new Date(mt).toLocaleString("en-US", { month: "short", year: k === 0 ? "numeric" : undefined, timeZone: "UTC" }) }, g);
+    });
+    CL.forEach(function (c, i) {
+      var yc = i * rowH + rowH / 2, a = t(D.window[c][0]), b = t(D.window[c][1]), days = Math.round((b - a) / 864e5) + 1;
+      var x0 = sx(a), x1 = Math.max(sx(b), x0 + 6);
+      el("text", { x: lw - 10, y: yc + 4, "text-anchor": "end", "class": "lbl", text: c }, g);
+      el("path", { d: roundedH(x0, x1, yc - 7, 14, 4), style: "fill:" + ACC }, g);
+      el("text", { x: x1 + 6, y: yc + 4, "class": "val", text: days + " days" }, g);
+      el("rect", { x: 0, y: i * rowH, width: w, height: rowH, "class": "hit", "data-tip": "<b>" + c + "</b> · " + D.names[c] + "<br>" + D.window[c][0] + " → " + D.window[c][1] + "<br>" + days + " days for " + num(D.counts[c]) + " papers" }, g);
+    });
+  });
+
+  // 03 cross-listing heatmap
+  chart("ch-cross", function (n, w) {
+    var mx = 0;
+    CL.forEach(function (a) { CL.forEach(function (b) { if (a !== b) mx = Math.max(mx, D.cross[a][b]); }); });
+    var cell = Math.min(150, Math.floor((w - 64 - 4) / CL.length)), rot = cell < 56;
+    heatmap(n, w, { rows: CL, cols: CL, labelW: 64, maxCell: 150, cellH: 46, top: rot ? 52 : 22, rotate: rot, bottom: 24, xTitle: "also listed in", minTextCell: 26,
+      values: CL.map(function (a) { return CL.map(function (b) { return a === b ? null : D.cross[a][b]; }); }),
+      color: function (v) { return sequential(Math.sqrt(v / mx)); }, fmt: function (v) { return Math.round(v * 100) + "%"; },
+      tip: function (v, i, j) { return "<b>" + pct(v, 0) + "</b> of " + CL[i] + " papers are also listed in " + CL[j]; }, aria: "Cross-listing between categories" });
+  });
+
+  // 05 model selection: validation macro-F1 (dot plot)
+  chart("ch-sel", function (n, w) {
+    var rows = SEL.slice().sort(function (a, b) { return b.val_macro_f1 - a.val_macro_f1; });
+    var vals = rows.map(function (r) { return r.val_macro_f1; });
+    var lo = Math.floor(Math.min.apply(null, vals) * 20) / 20, hi = Math.ceil(Math.max.apply(null, vals) * 20) / 20;
+    barH(n, w, { dot: true, domain: [lo, hi], rowH: 30, fmt: function (v) { return (+v).toFixed(w < 520 ? 2 : 3); }, aria: "Validation macro-F1 of every model",
+      labelW: w < 520 ? Math.round(w * 0.36) : Math.min(250, Math.round(w * 0.36)),
+      items: rows.map(function (r) { return { label: w < 520 ? sn(r.model) : r.model, value: r.val_macro_f1, color: FAM[r.family], bold: r.model === D.winner,
+        fmt: r.val_macro_f1.toFixed(3), tip: modelTip(r) }; }) });
+  });
+
+  // 05 quality vs training cost
+  chart("ch-cost", function (n, w) {
+    var place = { "Ensemble": [-1, "middle"], "SciBERT": [1, "middle"], "DistilBERT": [-1, "middle"], "MiniLM + LR": [-1, "end"], "TextCNN": [1, "start"],
+                  "TF-IDF + LR": [-1, "end"], "BiLSTM": [1, "middle"], "TF-IDF + SVM": [-1, "middle"], "TF-IDF + NB": [-1, "middle"] };
+    var ys = SEL.map(function (r) { return r.val_macro_f1; });
+    var y0 = Math.floor(Math.min.apply(null, ys) * 50 - 0.5) / 50, y1 = Math.ceil(Math.max.apply(null, ys) * 50 + 0.5) / 50;
+    var lx = function (r) { return Math.log10(Math.max(r.train_s, 0.01)); };
+    var rad = function (r) { return 4 + Math.sqrt(r.params_m) * (w < 520 ? 0.7 : 0.95); };
+    scatterChart(n, w, { x: [-2, 3.2], y: [y0, y1], ml: 50, height: Math.round(Math.max(300, Math.min(420, w * 0.5))),
+      xLabel: "training time (log scale)", yLabel: "validation macro-F1", aria: "Validation macro-F1 versus training time",
+      xFmt: function (v) { var s = Math.pow(10, v); return (s < 1 ? s.toFixed(Math.round(-v)) : num(s)) + " s"; }, yFmt: function (v) { return v.toFixed(2); },
+      points: SEL.map(function (r) { return { x: lx(r), y: r.val_macro_f1, r: rad(r), ring: true, alpha: 0.85, color: FAM[r.family], tip: modelTip(r) }; }),
+      labels: SEL.filter(function (r) {   // narrow screens: label only well-separated models; the rest show their name on tap
+        return w >= 520 || ["Ensemble", "TF-IDF + LR", "BiLSTM", "TF-IDF + NB"].indexOf(sn(r.model)) >= 0;
+      }).map(function (r) {
+        var s = sn(r.model), p = place[s] || [-1, "middle"], off = (rad(r) + 6) * p[0];
+        return { x: lx(r), y: r.val_macro_f1, dy: p[0] < 0 ? off : off + 8, dx: p[1] === "end" ? -4 : p[1] === "start" ? 4 : 0, anchor: p[1], t: s, bold: r.model === D.winner, small: w < 520 };
+      }) });
+  });
+
+  // 05 per-category F1 of every model
+  chart("ch-pc", function (n, w) {
+    var rows = SEL.slice().sort(function (a, b) { return b.val_macro_f1 - a.val_macro_f1; }).map(function (r) { return r.model; });
+    var lw = 104, cell = Math.min(150, Math.floor((w - lw - 4) / CL.length)), rot = cell < 56;
+    heatmap(n, w, { rows: rows.map(sn), cols: CL, labelW: lw, maxCell: 150, cellH: 32, top: rot ? 52 : 22, rotate: rot, minTextCell: 26,
+      values: rows.map(function (m) { return CL.map(function (c) { return D.pc[m][c]; }); }),
+      color: function (v) { return sequential((v - 0.25) / 0.72); }, fmt: function (v) { return v.toFixed(2); },
+      tip: function (v, i, j) { return "<b>" + rows[i] + "</b><br>" + CL[j] + " (" + D.names[CL[j]] + "): F1 " + v.toFixed(3); }, aria: "Validation F1 per category for every model" });
+  });
+
+  // 05 training curves of the neural models
+  chart("ch-curves", function (n, w) {
+    var style = { "TextCNN (from scratch)": [FAM.scratch, false], "BiLSTM (from scratch)": [FAM.scratch, true],
+                  "DistilBERT (fine-tuned)": [FAM["fine-tuned"], true], "SciBERT (fine-tuned)": [FAM["fine-tuned"], false] };
+    var names = Object.keys(D.curves), maxE = 1, all = [];
+    names.forEach(function (k) { var c = D.curves[k].val_macro_f1; maxE = Math.max(maxE, c.length); all = all.concat(c); });
+    var lo = Math.floor(Math.min.apply(null, all) * 20) / 20, hi = Math.ceil(Math.max.apply(null, all) * 20) / 20;
+    var xt = []; for (var e = 1; e <= maxE; e++) xt.push(e);
+    lineChart(n, w, { x: [1, maxE + (w < 520 ? 1.6 : 1.1)], y: [lo, hi], xTicks: xt, height: 280, mr: 8, xLabel: "epoch", yLabel: "validation macro-F1",
+      xFmt: function (v) { return v; }, yFmt: function (v) { return v.toFixed(2); }, aria: "Validation macro-F1 per epoch",
+      series: names.map(function (k) { var s = style[k] || [ACC, false];
+        return { pts: D.curves[k].val_macro_f1.map(function (v, i) { return [i + 1, v]; }), color: s[0], dash: s[1], dots: true, label: sn(k), bold: k.indexOf("SciBERT") === 0 }; }),
+      hoverX: xt, tip: function (i) { return "<b>epoch " + (i + 1) + "</b><br>" + names.map(function (k) { var v = D.curves[k].val_macro_f1[i]; return sn(k) + ": " + (v == null ? "stopped" : v.toFixed(3)); }).join("<br>"); } });
+  });
+
+  // 06 tuning: n-grams × C
+  chart("ch-tune", function (n, w) {
+    var ng = ["1-1", "1-2"], Cs = [1, 4, 16];
+    var best = function (a, c) { return Math.max.apply(null, D.tuning.filter(function (t) { return t.ngrams === a && t.C === c; }).map(function (t) { return t.val_macro_f1; })); };
+    var vals = ng.map(function (a) { return Cs.map(function (c) { return best(a, c); }); });
+    var flat = [].concat.apply([], vals), lo = Math.min.apply(null, flat), hi = Math.max.apply(null, flat);
+    heatmap(n, w, { rows: ["words", "words + pairs"], cols: Cs.map(function (c) { return "C = " + c; }), labelW: 110, maxCell: 400, cellH: 46, top: 22,
+      values: vals, color: function (v) { return sequential(0.15 + 0.85 * (v - lo) / ((hi - lo) || 1)); }, fmt: function (v) { return v.toFixed(3); },
+      tip: function (v, i, j) { return "<b>" + (i ? "1–2-grams" : "single words") + ", C = " + Cs[j] + "</b><br>" + D.tuning.filter(function (t) { return t.ngrams === ng[i] && t.C === Cs[j]; }).map(function (t) { return "min_df " + t.min_df + ": " + t.val_macro_f1.toFixed(4); }).join("<br>"); },
+      aria: "Tuning grid: validation macro-F1 for n-gram range and regularisation C" });
+  });
+
+  // 07 confusion matrix (row-normalised)
+  chart("ch-cm", function (n, w) {
+    var M = D.confusion, rs = M.map(function (r) { return r.reduce(function (a, b) { return a + b; }, 0); });
+    var cell = Math.min(150, Math.floor((w - 64 - 4) / CL.length)), rot = cell < 56;
+    heatmap(n, w, { rows: CL, cols: CL, labelW: 64, maxCell: 150, cellH: 46, top: rot ? 52 : 22, rotate: rot, bottom: 24, xTitle: "predicted", minTextCell: 26,
+      values: M.map(function (r, i) { return r.map(function (v) { return v / rs[i]; }); }),
+      color: function (v) { return sequential(Math.sqrt(v)); }, fmt: function (v) { return Math.round(v * 100) + "%"; },
+      tip: function (v, i, j) { return "<b>true " + CL[i] + " → predicted " + CL[j] + "</b><br>" + M[i][j] + " of " + rs[i] + " papers (" + pct(v, 0) + ")"; }, aria: "Confusion matrix on the test set" });
+  });
+
+  // 07 F1 per category
+  chart("ch-f1", function (n, w) {
+    var rows = CL.slice().sort(function (a, b) { return D.per_class_f1[b] - D.per_class_f1[a]; });
+    barH(n, w, { domain: [0, 1], rowH: 30, labelW: w < 520 ? 70 : 250, fmt: function (v) { return (+v).toFixed(2); }, aria: "Test F1 per category",
+      items: rows.map(function (c) { return { label: w < 520 ? c : c + " · " + D.names[c], value: D.per_class_f1[c], color: ACC, tip: "<b>" + c + "</b> · " + D.names[c] + "<br>test F1 " + D.per_class_f1[c].toFixed(3) }; }) });
+  });
+
+  // 07 t-SNE map, with the legend doubling as a filter
+  var focus = null;
+  var chips = document.getElementById("tsne-chips");
+  if (chips) {
+    CL.forEach(function (c) {
+      var b = document.createElement("button");
+      b.type = "button"; b.setAttribute("aria-pressed", "false"); b.dataset.c = c;
+      b.innerHTML = '<i style="background:' + CC[c] + '"></i>' + c;
+      b.addEventListener("click", function () {
+        focus = focus === c ? null : c;
+        chips.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", x.dataset.c === focus ? "true" : "false"); });
+        rerender("ch-tsne");
+      });
+      chips.appendChild(b);
+    });
+  }
+  chart("ch-tsne", function (n, w) {
+    var S = D.tsne, idx = S.x.map(function (_, i) { return i; });
+    if (focus) idx.sort(function (a, b) { return (CL[S.label[a]] === focus) - (CL[S.label[b]] === focus); });
+    var xr = [Math.min.apply(null, S.x), Math.max.apply(null, S.x)], yr = [Math.min.apply(null, S.y), Math.max.apply(null, S.y)];
+    var pts = idx.map(function (i) {
+      var c = CL[S.label[i]], on = !focus || c === focus;
+      return { x: S.x[i], y: S.y[i], r: on && focus ? 3.2 : 2.6, alpha: on ? 0.7 : 0.18, color: on ? CC[c] : MUTED,
+               tip: "<b>" + c + "</b> · " + D.names[c] + (S.correct[i] ? "<br>classified correctly" : "<br>misclassified by the final model") };
+    });
+    var labels = CL.map(function (c, k) {
+      var px = [], py = [];
+      S.label.forEach(function (l, i) { if (l === k) { px.push(S.x[i]); py.push(S.y[i]); } });
+      px.sort(function (a, b) { return a - b; }); py.sort(function (a, b) { return a - b; });
+      return { x: px[px.length >> 1], y: py[py.length >> 1], t: c, bold: true };
+    }).filter(function (lb) { return !focus || lb.t === focus; });
+    scatterChart(n, w, { x: xr, y: yr, noAxes: true, ml: 8, height: Math.round(Math.min(620, Math.max(340, w * 0.66))), aria: "t-SNE map of test abstracts", points: pts, labels: labels });
+  });
+
+  // 08 decision policy: coverage vs accuracy
+  chart("ch-cov", function (n, w) {
+    var C = D.policy.curve.map(function (p, k) { return { t: 0.95 * k / (D.policy.curve.length - 1), c: p[0] * 100, a: p[1] == null ? null : p[1] * 100 }; })
+      .filter(function (p) { return p.a != null; });
+    var seen = {}, U = C.filter(function (p) { var k = p.c.toFixed(2); if (seen[k]) return false; seen[k] = 1; return true; });
+    var minCov = Math.floor(Math.min.apply(null, U.map(function (p) { return p.c; })) / 10) * 10;
+    var lo = Math.floor(Math.min.apply(null, U.map(function (p) { return p.a; })) / 5) * 5;
+    var marks = D.policy.threshold != null ? [[D.policy.coverage * 100, D.policy.accuracy * 100, "confidence ≥ " + D.policy.threshold.toFixed(2) + ": " + pct(D.policy.coverage, 0) + " automated at " + pct(D.policy.accuracy, 1), "left", -12]] : [];
+    lineChart(n, w, { x: [100, minCov], y: [lo, 100], height: 260, ml: 48, xTicks: niceTicks(minCov, 100, w < 520 ? 4 : 6), xLabel: "papers classified automatically", yLabel: "accuracy on those papers",
+      xFmt: function (v) { return Math.round(v) + "%"; }, yFmt: function (v) { return Math.round(v) + "%"; }, aria: "Coverage versus accuracy",
+      refs: [[100, 95, minCov, 95]], series: [{ pts: U.map(function (p) { return [p.c, p.a]; }), color: ACC, dots: false }], marks: marks,
+      hoverX: U.map(function (p) { return p.c; }), tip: function (i) { var p = U[i]; return "<b>confidence ≥ " + p.t.toFixed(2) + "</b><br>automated " + p.c.toFixed(1) + "% of papers<br>accuracy " + p.a.toFixed(1) + "%"; } });
+  });
+
+  // ---------------------------------------------------------------- embedding: report height to a parent page
+  if (window.parent && window.parent !== window) {
+    var post = function () { try { window.parent.postMessage({ type: "cvd-report:height", height: document.documentElement.scrollHeight, page: location.pathname }, "*"); } catch (e) { } };
+    if (typeof ResizeObserver !== "undefined") new ResizeObserver(post).observe(document.body);
+    window.addEventListener("load", post);
+  }
+})();
+
+</script>
+</body>
+</html>

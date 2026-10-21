@@ -1,13 +1,17 @@
-<!-- Cats vs Dogs report: paste where the report should appear on your page.
-     Replace the src with your live address (Vercel or GitHub Pages). The script resizes the
-     frame to the report's full height, so the report scrolls with your page. -->
-<iframe id="cvd-report-frame" src="https://YOUR-PROJECT.vercel.app/" title="Cats vs Dogs deep-learning report"
+<!-- Deep learning projects: paste this where the section should appear on your blog page.
+     Change src to your Vercel address. The frame grows to the full height of the page shown inside it,
+     and when a reader switches project with the menu inside the frame, your page scrolls back to the frame's top. -->
+<iframe id="dl-projects-frame" src="https://YOUR-PROJECT.vercel.app/" title="Deep learning projects"
         style="width:100%;border:0;display:block;min-height:600px" loading="lazy"></iframe>
 <script>
-  window.addEventListener("message", function (e) {
-    var f = document.getElementById("cvd-report-frame");
-    if (f && e.source === f.contentWindow && e.data && e.data.type === "cvd-report:height") {
+  (function () {
+    var lastPage = null;
+    window.addEventListener("message", function (e) {
+      var f = document.getElementById("dl-projects-frame");
+      if (!f || e.source !== f.contentWindow || !e.data || e.data.type !== "cvd-report:height") return;
       f.style.height = e.data.height + "px";
-    }
-  });
+      if (e.data.page && lastPage && e.data.page !== lastPage) f.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (e.data.page) lastPage = e.data.page;
+    });
+  })();
 </script>
