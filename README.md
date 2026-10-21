@@ -92,7 +92,7 @@ print("dog" if p_dog >= 0.5 else "cat", round(p_dog, 3))
 1. Push this repository to GitHub.
 2. *Settings → Pages → Build and deployment → Source: Deploy from a branch*, branch `main`, folder `/docs`, *Save*.
 3. After a minute the report is live at `https://H-yz2022.github.io/cats-vs-dogs-deep-learning/`.
-   Replace `H-yz2022` in this README and in `docs/embed-snippet.html`.
+   Put your live address in place of `YOUR-PROJECT.vercel.app` at the top of this README and in `docs/embed-snippet.html`.
 
 ## Data and credits
 
