@@ -598,7 +598,7 @@ body { background: var(--cvd-bg); color: var(--cvd-ink); }
     <figure class="cvd-fig">
       <span class="ttl">Coverage against accuracy as the confidence threshold rises</span>
       <div class="cvd-chart" id="ch-cov"></div>
-      <figcaption>Moving right raises the threshold: fewer papers are classified automatically, but those are classified more accurately. The dashed line marks a 95 % accuracy target, reached at confidence ≥ 0.87 with 36% of papers automated; at 90 % accuracy, 61% could be automated.</figcaption>
+      <figcaption>Moving right raises the threshold: fewer papers are classified automatically, but those are classified more accurately. The dashed line marks a 95 % accuracy target, reached at confidence ≥ 0.87 with 36% of papers automated; at 90 % accuracy, 61% could be automated. The curve is drawn on the test set to show the trade-off, so the chosen threshold is slightly optimistic; in use it would be fixed on validation data first and then checked on new papers.</figcaption>
     </figure>
   </section>
 
