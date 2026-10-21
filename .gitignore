@@ -1,0 +1,6 @@
+# training checkpoints and downloads are recreated by the notebook
+results/cache/
+*.zip
+.ipynb_checkpoints/
+__pycache__/
+.vercel/

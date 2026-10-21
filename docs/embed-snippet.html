@@ -1,0 +1,13 @@
+<!-- Cats vs Dogs report: paste where the report should appear on your page.
+     Replace the src with your live address (Vercel or GitHub Pages). The script resizes the
+     frame to the report's full height, so the report scrolls with your page. -->
+<iframe id="cvd-report-frame" src="https://YOUR-PROJECT.vercel.app/" title="Cats vs Dogs deep-learning report"
+        style="width:100%;border:0;display:block;min-height:600px" loading="lazy"></iframe>
+<script>
+  window.addEventListener("message", function (e) {
+    var f = document.getElementById("cvd-report-frame");
+    if (f && e.source === f.contentWindow && e.data && e.data.type === "cvd-report:height") {
+      f.style.height = e.data.height + "px";
+    }
+  });
+</script>
